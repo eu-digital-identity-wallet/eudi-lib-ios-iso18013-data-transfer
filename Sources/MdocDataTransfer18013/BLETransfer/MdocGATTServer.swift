@@ -1,20 +1,31 @@
 //
 //  MdocGATTServer.swift
 import Foundation
+import MdocDataModel18013
+import MdocSecurity18013
 import CombineCoreBluetooth
 
 public class MdocGattServer: ObservableObject {
 	let peripheralManager = PeripheralManager.live
-	let uuid: CBUUID
-	let mdocOfflineHandler: any MdocOfflineHandler
+	let de: DeviceEngagement
+	var sessionEncryption: SessionEncryption!
+	let delegate: any MdocOfflineDelegate
 	@Published var logs: String = ""
 	var cancellables = Set<AnyCancellable>()
 	@Published public var advertising: Bool = false
 	@Published public var error: Error? = nil
+	public var requireUserAccept = false
 	
-	init(uuid: CBUUID, handler: any MdocOfflineHandler) {
-		self.uuid = uuid
-		self.mdocOfflineHandler = handler
+	public convenience init?(delegate: any MdocOfflineDelegate) {
+		let de = DeviceEngagement(isBleServer: true)
+		self.init(de: de, delegate: delegate)
+	}
+	
+	public init?(de: DeviceEngagement, delegate: any MdocOfflineDelegate) {
+		self.de = de
+		guard de.isBleServer == true, de.ble_uuid != nil else { logger.error("Device engagement must have BLE with server mode record."); return nil }
+		guard de.privateKey != nil else { logger.error("Device engagement must have private key (ephemeral holder key"); return nil }
+		self.delegate = delegate
 		peripheralManager.didReceiveWriteRequests
 			.receive(on: DispatchQueue.main)
 			.sink { [weak self] requests in
@@ -28,10 +39,10 @@ public class MdocGattServer: ObservableObject {
 	}
 	
 	func buildServices() {
-		let bleUserService = CBMutableService(type: uuid, primary: true)
+		let bleUserService = CBMutableService(type: CBUUID(string: de.ble_uuid!), primary: true)
 		let stateCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.state.uuid, properties: [.notify, .writeWithoutResponse], value: nil, permissions: [.writeable])
 		let client2ServerCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.client2Server.uuid, properties: [.writeWithoutResponse], value: nil, permissions: [.writeable])
-		let server2ClientCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.server2Client.uuid, properties: [.notify], value: nil,permissions: [])
+		let server2ClientCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.server2Client.uuid, properties: [.notify], value: nil, permissions: [])
 		bleUserService.characteristics = [stateCharacteristic, client2ServerCharacteristic, server2ClientCharacteristic]
 		
 		peripheralManager.removeAllServices()
@@ -41,7 +52,7 @@ public class MdocGattServer: ObservableObject {
 	func start() {
 		if peripheralManager.state == .poweredOn {
 			buildServices()
-			peripheralManager.startAdvertising(.init([.serviceUUIDs: [uuid]]))
+			peripheralManager.startAdvertising(.init([.serviceUUIDs: [CBUUID(string: de.ble_uuid!)]]))
 			advertising = true
 		} else {
 			// once bt is powered on, advertise

@@ -1,18 +1,13 @@
 //
-//  File.swift
-//  
-//
-//  Created by ffeli on 13/07/2023.
-//
+//  TransferStatus.swift
 
 import Foundation
 
-enum TransferStatus: String {
-	
+public enum TransferStatus: String {
+	case qrEngegementReady
+	case connected
+	case requestReceived
+	case responseSent
+	case disconnected
+	case error
 }
-.QR_ENGAGEMENT_READY -> {}
-TransferStatus.CONNECTED -> {}
-TransferStatus.REQUEST_RECEIVED -> {}
-TransferStatus.RESPONSE_SENT -> {}
-TransferStatus.DISCONNECTED -> {}
-TransferStatus.ERROR -> {}

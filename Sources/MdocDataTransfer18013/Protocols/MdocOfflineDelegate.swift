@@ -3,9 +3,12 @@
 
 import Foundation
 import Combine
+import MdocDataModel18013
+import MdocSecurity18013
+
+public typealias UserAcceptHandler = (Bool) -> Void
 
 public protocol MdocOfflineDelegate {
-	func setRequestData(_ data: Data) throws
-	func getResponseData() throws -> Data
-	var userAccepted: Future<Bool,Error> { get }
+	func didChangeStatus(_ newStatus: TransferStatus)
+	func didReceiveRequest(_ request: DeviceRequest, handleAccept: UserAcceptHandler)
 }

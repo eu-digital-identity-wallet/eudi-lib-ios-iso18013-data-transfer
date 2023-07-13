@@ -3,6 +3,11 @@
 import Foundation
 import CoreBluetooth
 
+public enum BleMode {
+	case server
+	case client
+}
+
 /// mdoc service characteristic definitions (mdoc is the GATT server)
 public enum MdocServiceCharacteristic: String {
 	case state
