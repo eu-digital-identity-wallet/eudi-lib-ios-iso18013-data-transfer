@@ -3,9 +3,14 @@
 import Foundation
 import CoreBluetooth
 
-public enum BleMode {
+public enum BleTransferMode {
 	case server
 	case client
+	// signals for coordination
+	static var START_REQUEST: [UInt8] = [0x01]
+	static var END_REQUEST: [UInt8] = [0x02]
+	static var START_DATA: [UInt8] = [0x01]
+	static var END_DATA: [UInt8] = [0x00]
 }
 
 /// mdoc service characteristic definitions (mdoc is the GATT server)
@@ -16,6 +21,10 @@ public enum MdocServiceCharacteristic: String {
 }
 
 extension MdocServiceCharacteristic {
+	init?(uuid: CBUUID) {
+		self.init(rawValue: uuid.uuidString)
+	}
+	
 	var uuid: CBUUID {
 		switch self {
 		case .state: return CBUUID(string: "00000001-A123-48CE-896B-4C76973373E6")

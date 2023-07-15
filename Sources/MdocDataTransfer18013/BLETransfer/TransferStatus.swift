@@ -4,8 +4,10 @@
 import Foundation
 
 public enum TransferStatus: String {
-	case qrEngegementReady
+	case initializing
+	case qrEngagementReady
 	case connected
+	case started
 	case requestReceived
 	case responseSent
 	case disconnected
