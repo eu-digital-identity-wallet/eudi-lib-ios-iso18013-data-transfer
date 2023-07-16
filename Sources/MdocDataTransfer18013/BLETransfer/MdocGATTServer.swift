@@ -11,30 +11,28 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	var remoteCentral: Central!
 	var stateCharacteristic: CBMutableCharacteristic!
 	var server2ClientCharacteristic: CBMutableCharacteristic!
-	let de: DeviceEngagement
+	public var deviceEngagement: DeviceEngagement?
 	public var sessionEncryption: SessionEncryption?
-	public var docs: [DeviceResponse]?
-	let delegate: any MdocOfflineDelegate
+	public var docs: [DeviceResponse]
+	weak var delegate: (any MdocOfflineDelegate)?
 	var cancellables = Set<AnyCancellable>()
 	@Published public var advertising: Bool = false
 	@Published public var error: Error? = nil
 	@Published public var status: TransferStatus = .initializing { willSet { handleStatusChange(newValue) }}
 	public var requireUserAccept = false
+	public var displayDefaultAcceptUI = true
 	var readBuffer = Data()
 	var sendBuffer = [Data]()
+	var numBlocks: Int = 0
 	
-	public convenience init?(delegate: any MdocOfflineDelegate) {
-		let de = DeviceEngagement(isBleServer: true)
-		self.init(de: de, delegate: delegate)
-	}
-	
-	public init?(de: DeviceEngagement, delegate: any MdocOfflineDelegate) {
-		self.de = de
-		guard de.isBleServer == true, de.ble_uuid != nil else { logger.error("Device engagement must have BLE with server mode record."); return nil }
-		guard de.privateKey != nil else { logger.error("Device engagement must have private key (ephemeral holder key"); return nil }
-		self.delegate = delegate
+	public init(docs: [DeviceResponse]) {
+		self.docs = docs
 		peripheralManager.didReceiveWriteRequests.receive(on: DispatchQueue.main).sink { [weak self] requests in
-			guard let self = self, self.status == .connected else { return }
+			guard let self = self, self.status == .connected || status == .started else {
+				logger.error("Not in connected state")
+				self?.peripheralManager.respond(to: requests[0], withResult: .unlikelyError);
+				return
+			}
 			if requests[0].characteristic.uuid == MdocServiceCharacteristic.state.uuid, let h = requests[0].value?.first {
 				if h == BleTransferMode.START_REQUEST.first! {
 					logger.info("Start request received to state characteristic") // --> start
@@ -69,25 +67,26 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 			let mdocCbc = MdocServiceCharacteristic(uuid: cbc.uuid)
 			logger.info("Remote central \(central.identifier) disconnected for \(mdocCbc?.rawValue ?? "") characteristic: \(cbc.uuid)")
 		}.store(in: &cancellables)
-		peripheralManager.readyToUpdateSubscribers.receive(on: DispatchQueue.main).sink { [weak self] in
+		peripheralManager.readyToUpdateSubscribers.sink { [weak self] in
 			guard let self = self, self.remoteCentral != nil else { return }
-			sendDataWithUpdates()
+			self.sendDataWithUpdates() //DispatchQueue.main.asyncAfter(deadline: .now()+0.1) { self.sendDataWithUpdates() }
 		}.store(in: &cancellables)
 	}
 	
 	public func performDeviceEngagement() -> UIImage? {
-		guard let qrCodeImage = de.getQrCodeImage() else { logger.error("Null Device engagement"); return nil }
+		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
+		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { logger.error("Null Device engagement"); return nil }
 		status = .qrEngagementReady
+		start()
 		return qrCodeImage
 	}
 	
-	func buildServices() {
-		let bleUserService = CBMutableService(type: CBUUID(string: de.ble_uuid!), primary: true)
+	func buildServices(uuid: String) {
+		let bleUserService = CBMutableService(type: CBUUID(string: uuid), primary: true)
 		stateCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.state.uuid, properties: [.notify, .writeWithoutResponse], value: nil, permissions: [.writeable])
 		let client2ServerCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.client2Server.uuid, properties: [.writeWithoutResponse], value: nil, permissions: [.writeable])
 		server2ClientCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.server2Client.uuid, properties: [.notify], value: nil, permissions: [])
 		bleUserService.characteristics = [stateCharacteristic, client2ServerCharacteristic, server2ClientCharacteristic]
-		
 		peripheralManager.removeAllServices()
 		peripheralManager.add(bleUserService)
 	}
@@ -95,8 +94,11 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	func start() {
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
-			buildServices()
-			peripheralManager.startAdvertising(.init([.serviceUUIDs: [CBUUID(string: de.ble_uuid!)]]))
+			guard var uuid = deviceEngagement!.ble_uuid else { logger.error("BLE initialization error"); return }
+			let index = uuid.index(uuid.startIndex, offsetBy: 4)
+			uuid = String(uuid[index...].prefix(4)).uppercased()
+			buildServices(uuid: uuid)
+			peripheralManager.startAdvertising(.init([.serviceUUIDs: [CBUUID(string: uuid)]]))
 			advertising = true
 		} else {
 			// once bt is powered on, advertise
@@ -104,7 +106,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 	}
 	
-	func stop() {
+	public func stop() {
 		peripheralManager.stopAdvertising()
 		cancellables = []
 		advertising = false
@@ -119,13 +121,15 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 		else if newValue == .started || newValue == .connected {
 			DispatchQueue.main.asyncAfter(deadline: .now() + 300, execute: { self.status = .disconnected })
+		} else if newValue == .error || newValue == .disconnected {
+			stop()
 		}
 	}
 	
 	func prepareDataToSend(_ msg: Data) {
-		let numBlocks = Helpers.CountNumBlocks(dataLength: msg.count, maxBlockSize: remoteCentral.maximumUpdateValueLength-1)
+		numBlocks = Helpers.CountNumBlocks(dataLength: msg.count, maxBlockSize: remoteCentral.maximumUpdateValueLength-1)
 		logger.info("Sending response of total bytes \(msg.count) in \(numBlocks) blocks")
-		self.sendBuffer.removeAll()
+		sendBuffer.removeAll()
 		// send blocks
 		for i in 0..<numBlocks {
 			let (block,bEnd) = Helpers.CreateBlockCommand(data: msg, blockId: i, maxBlockSize: remoteCentral.maximumUpdateValueLength-1)
@@ -133,13 +137,14 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 			blockWithHeader.append(contentsOf: !bEnd ? BleTransferMode.START_DATA : BleTransferMode.END_DATA)
 			// send actual data after header
 			blockWithHeader.append(contentsOf: block)
-			self.sendBuffer.append(blockWithHeader)
+			sendBuffer.append(blockWithHeader)
 		}
 	}
 	
 	func sendDataWithUpdates() {
-		guard sendBuffer.count > 0 else { return }
-		let b = peripheralManager.updateValue(sendBuffer.removeFirst(), for: server2ClientCharacteristic, onSubscribedCentrals: [remoteCentral])
-		if b { sendDataWithUpdates() }
+		guard sendBuffer.count > 0 else { logger.info("Finished sending BLE data"); return }
+		//logger.info("Sending \(numBlocks - sendBuffer.count + 1) out of \(numBlocks) blocks")
+		let b = peripheralManager.updateValue(sendBuffer.first!, for: server2ClientCharacteristic, onSubscribedCentrals: [remoteCentral])
+		if b { sendBuffer.removeFirst(); sendDataWithUpdates() }
 	}
 }

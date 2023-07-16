@@ -11,6 +11,7 @@ public enum BleTransferMode {
 	static var END_REQUEST: [UInt8] = [0x02]
 	static var START_DATA: [UInt8] = [0x01]
 	static var END_DATA: [UInt8] = [0x00]
+	public static let BASE_UUID_SUFFIX_SERVICE = "-0000-1000-8000-00805F9B34FB"
 }
 
 /// mdoc service characteristic definitions (mdoc is the GATT server)
