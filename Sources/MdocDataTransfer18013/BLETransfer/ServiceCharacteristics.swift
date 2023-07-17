@@ -18,22 +18,13 @@ public enum BleTransferMode {
 
 /// mdoc service characteristic definitions (mdoc is the GATT server)
 public enum MdocServiceCharacteristic: String {
-	case state
-	case client2Server
-	case server2Client
+	case state = "00000001-A123-48CE-896B-4C76973373E6"
+	case client2Server = "00000002-A123-48CE-896B-4C76973373E6"
+	case server2Client = "00000003-A123-48CE-896B-4C76973373E6"
 }
 
 extension MdocServiceCharacteristic {
-	init?(uuid: CBUUID) {
-		self.init(rawValue: uuid.uuidString)
-	}
-	
-	var uuid: CBUUID {
-		switch self {
-		case .state: return CBUUID(string: "00000001-A123-48CE-896B-4C76973373E6")
-		case .client2Server: return CBUUID(string: "00000002-A123-48CE-896B-4C76973373E6")
-		case .server2Client: return CBUUID(string: "00000003-A123-48CE-896B-4C76973373E6")
-		}
-	}
+	init?(uuid: CBUUID) {	self.init(rawValue: uuid.uuidString.uppercased()) }
+	var uuid: CBUUID { CBUUID(string: rawValue) }
 }
 

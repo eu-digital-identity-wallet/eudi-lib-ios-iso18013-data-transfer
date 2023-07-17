@@ -60,13 +60,13 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		peripheralManager.centralDidSubscribeToCharacteristic.receive(on: DispatchQueue.main).sink { [weak self] central,cbc in
 			guard let self = self, self.status == .qrEngagementReady else { return }
 			let mdocCbc = MdocServiceCharacteristic(uuid: cbc.uuid)
-			logger.info("Remote central \(central.identifier) connected for \(mdocCbc?.rawValue ?? "") characteristic: \(cbc.uuid)")
+			logger.info("Remote central \(central.identifier) connected for \(mdocCbc?.rawValue ?? "") characteristic")
 			self.remoteCentral = central
 			if cbc.uuid == MdocServiceCharacteristic.server2Client.uuid { status = .connected }
 		}.store(in: &cancellables)
 		peripheralManager.centralDidSubscribeToCharacteristic.receive(on: DispatchQueue.main).sink { central,cbc in
 			let mdocCbc = MdocServiceCharacteristic(uuid: cbc.uuid)
-			logger.info("Remote central \(central.identifier) disconnected for \(mdocCbc?.rawValue ?? "") characteristic: \(cbc.uuid)")
+			logger.info("Remote central \(central.identifier) disconnected for \(mdocCbc?.rawValue ?? "") characteristic")
 		}.store(in: &cancellables)
 		peripheralManager.readyToUpdateSubscribers.sink { [weak self] in
 			guard let self = self, self.remoteCentral != nil else { return }
@@ -76,6 +76,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	
 	public func performDeviceEngagement() -> UIImage? {
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
+		sessionEncryption = nil
 		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { logger.error("Null Device engagement"); return nil }
 		status = .qrEngagementReady
 		start()
@@ -110,7 +111,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public func stop() {
 		peripheralManager.stopAdvertising()
 		peripheralManager.removeAllServices()
-		cancellables = []
 		advertising = false
 	}
 	

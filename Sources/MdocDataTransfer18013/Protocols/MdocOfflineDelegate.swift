@@ -25,12 +25,13 @@ public protocol MdocTransferManager: AnyObject {
 
 extension MdocTransferManager {
 	func getMdocResponseToSend(requestData: Data) -> Data? {
-		guard let se = SessionEstablishment(data: [UInt8](requestData)) else { logger.error("Request Data cannot be decoded to session establisment"); return nil }
-		let requestCipherData = se.data
-		guard let deviceEngagement else { logger.error("Device Engagement not initialized"); return nil }
-		sessionEncryption = SessionEncryption(se: se, de: deviceEngagement, handOver: BleTransferMode.QRHandover)
-		guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
 		do {
+			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return nil }
+			guard let se = SessionEstablishment(cbor: seCbor) else { logger.error("Request Data cannot be decoded to session establisment"); return nil }
+			let requestCipherData = se.data
+			guard let deviceEngagement else { logger.error("Device Engagement not initialized"); return nil }
+			sessionEncryption = SessionEncryption(se: se, de: deviceEngagement, handOver: BleTransferMode.QRHandover)
+			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
 			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return nil }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return nil }
 			guard let docToSend = self.docs.first else { logger.error("Transfer manager has not any doc"); return nil } // todo: find document and filter its data
