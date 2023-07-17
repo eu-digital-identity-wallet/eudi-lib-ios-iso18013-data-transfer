@@ -17,7 +17,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	weak var delegate: (any MdocOfflineDelegate)?
 	var cancellables = Set<AnyCancellable>()
 	@Published public var advertising: Bool = false
-	@Published public var error: Error? = nil
+	@Published public var error: Error? = nil  { willSet { handleErrorSet(newValue) }}
 	@Published public var status: TransferStatus = .initializing { willSet { handleStatusChange(newValue) }}
 	public var requireUserAccept = false
 	public var displayDefaultAcceptUI = true
@@ -41,6 +41,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 				}
 				else if h == BleTransferMode.END_REQUEST.first! {
 					logger.info("End received to state characteristic") // --> end
+					stop()
 					status = .disconnected
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
@@ -108,6 +109,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	
 	public func stop() {
 		peripheralManager.stopAdvertising()
+		peripheralManager.removeAllServices()
 		cancellables = []
 		advertising = false
 	}
@@ -124,6 +126,12 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		} else if newValue == .error || newValue == .disconnected {
 			stop()
 		}
+	}
+	
+	func handleErrorSet(_ newValue: Error?) {
+		guard let newValue else { return }
+		status = .error
+		logger.log(level: .error, "Transfer error \(newValue) (\(newValue.localizedDescription)")
 	}
 	
 	func prepareDataToSend(_ msg: Data) {

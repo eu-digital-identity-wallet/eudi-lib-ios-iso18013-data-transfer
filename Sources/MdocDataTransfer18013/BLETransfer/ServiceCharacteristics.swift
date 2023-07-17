@@ -2,6 +2,7 @@
 //  ServiceDefinition.swift
 import Foundation
 import CoreBluetooth
+import SwiftCBOR
 
 public enum BleTransferMode {
 	case server
@@ -12,6 +13,7 @@ public enum BleTransferMode {
 	static var START_DATA: [UInt8] = [0x01]
 	static var END_DATA: [UInt8] = [0x00]
 	public static let BASE_UUID_SUFFIX_SERVICE = "-0000-1000-8000-00805F9B34FB"
+	public static let QRHandover = CBOR.null
 }
 
 /// mdoc service characteristic definitions (mdoc is the GATT server)
