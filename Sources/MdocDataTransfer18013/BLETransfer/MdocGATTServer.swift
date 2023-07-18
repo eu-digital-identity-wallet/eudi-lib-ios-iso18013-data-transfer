@@ -2,6 +2,7 @@
 //  MdocGATTServer.swift
 import Foundation
 import UIKit
+import Logging
 import MdocDataModel18013
 import MdocSecurity18013
 import CombineCoreBluetooth
@@ -79,7 +80,8 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public func performDeviceEngagement() -> UIImage? {
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
 		sessionEncryption = nil
-		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { logger.error("Null Device engagement"); return nil }
+		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return nil }
+		guard docs.allSatisfy({ $0.documents != nil }) else { error = Self.makeError(code: .invalidInputDocument); return nil }
 		status = .qrEngagementReady
 		start()
 		return qrCodeImage
@@ -119,7 +121,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	func handleStatusChange(_ newValue: TransferStatus) {
 		logger.log(level: .info, "Transfer status will change to \(newValue)")
 		if newValue == .requestReceived {
-			guard let bytes = getMdocResponseToSend(requestData: readBuffer) else { status = .error; return }
+			guard let bytes = getMdocResponseToSend(requestData: readBuffer) else { error = Self.makeError(code: .noDocumentToReturn); return }
 			prepareDataToSend(bytes)
 			sendDataWithUpdates()
 		}
@@ -128,6 +130,12 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		} else if newValue == .error || newValue == .disconnected {
 			stop()
 		}
+	}
+	
+	static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
+		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
+		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
+		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage])
 	}
 	
 	func handleErrorSet(_ newValue: Error?) {
