@@ -14,6 +14,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public var deviceEngagement: DeviceEngagement?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [DeviceResponse]
+	public var iaca: Data
 	weak var delegate: (any MdocOfflineDelegate)?
 	var cancellables = Set<AnyCancellable>()
 	@Published public var advertising: Bool = false
@@ -25,8 +26,9 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	var sendBuffer = [Data]()
 	var numBlocks: Int = 0
 	
-	public init(docs: [DeviceResponse]) {
+	public init(docs: [DeviceResponse], iaca: Data) {
 		self.docs = docs
+		self.iaca = iaca
 		peripheralManager.didReceiveWriteRequests.receive(on: DispatchQueue.main).sink { [weak self] requests in
 			guard let self = self, self.status == .connected || status == .started else {
 				logger.error("Not in connected state")

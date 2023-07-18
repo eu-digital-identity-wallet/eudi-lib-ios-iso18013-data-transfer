@@ -20,6 +20,7 @@ public protocol MdocTransferManager: AnyObject {
 	var displayDefaultAcceptUI: Bool { get set }
 	var sessionEncryption: SessionEncryption? { get set }
 	var docs: [DeviceResponse] { get set }
+	var iaca: Data  { get set }
 	var error: Error? { get set }
 }
 
@@ -34,7 +35,19 @@ extension MdocTransferManager {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
 			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return nil }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return nil }
-			guard let docToSend = self.docs.first else { logger.error("Transfer manager has not any doc"); return nil } // todo: find document and filter its data
+			guard var docToSend = self.docs.first else { logger.error("Transfer manager has not any doc"); return nil } // todo: find document and filter its data
+			/*
+			guard let documents = docToSend.documents else { logger.error("No document found"); return nil }
+			var documentCopies = [Document]()
+			for d in documents {
+				var dCopy = d
+				if d.issuerSigned.issuerAuth == nil {
+					dCopy.issuerSigned.issuerAuth = try IssuerAuthentication.makeDefaultIssuerAuth(for: d, iaca: iaca)
+				}
+				documentCopies.append(dCopy)
+			}
+			docToSend.documents = documentCopies
+			 */
 			let cborToSend = docToSend.toCBOR(options: CBOROptions())
 			let clearBytesToSend = cborToSend.encode()
 			guard let cipherData = try sessionEncryption.encrypt(clearBytesToSend) else { return nil }
