@@ -15,6 +15,8 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	var server2ClientCharacteristic: CBMutableCharacteristic!
 	public var deviceEngagement: DeviceEngagement?
 	var deviceRequest: DeviceRequest?
+	public var deviceResponseToSend: DeviceResponse?
+	public var validRequestItems: Set<String>? = Set()
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [DeviceResponse]
 	public var iaca: Data
@@ -207,11 +209,11 @@ extension MdocGattServer: MdocOfflineDelegate {
 	public func didChangeStatus(_ newStatus: MdocDataTransfer18013.TransferStatus) {
 	}
 	
-	public func didReceiveRequest(_ request: MdocDataModel18013.DeviceRequest, handleAccept: @escaping (Bool) -> Void) {
+	public func didReceiveRequest(_ request: [String], handleAccept: @escaping (Bool) -> Void) {
 		print(request.toCBOR(options: CBOROptions()).description)
 		hasRequestPresented = true
 		self.handleAccept = handleAccept
-		requestItemsMessage = request.docRequests.flatMap { $0.itemsRequest.requestNameSpaces.nameSpaces.values }.flatMap { $0.elementIdentifiers.map { NSLocalizedString($0, comment: "") } }.joined(separator: "\n")
+		requestItemsMessage = request.map { NSLocalizedString($0, comment: "") }.joined(separator: "\n")
 	}
 	
 	public func didFinishedWithError(_ error: Error) {
