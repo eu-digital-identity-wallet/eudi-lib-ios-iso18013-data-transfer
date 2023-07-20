@@ -7,11 +7,10 @@ import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
 
-public typealias UserAcceptHandler = (Bool) -> Void
-
 public protocol MdocOfflineDelegate: AnyObject {
 	func didChangeStatus(_ newStatus: TransferStatus)
-	func didReceiveRequest(_ request: DeviceRequest, handleAccept: UserAcceptHandler)
+	func didFinishedWithError(_ error: Error)
+	func didReceiveRequest(_ request: DeviceRequest, handleAccept: @escaping (Bool) -> Void)
 }
 
 
