@@ -60,7 +60,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 						return
 					}
 					logger.info("End received to state characteristic") // --> end
-					stop()
 					status = .disconnected
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
@@ -152,9 +151,9 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 			if deviceRequest == nil { error = Self.makeError(code: .requestDecodeError) }
 			if requireUserAccept == false { userAccepted(true) }
 		}
-		else if newValue == .started || newValue == .connected {
+		else if newValue == .started {
 			DispatchQueue.main.asyncAfter(deadline: .now() + 300, execute: { self.status = .disconnected })
-		} else if newValue == .error || newValue == .disconnected {
+		} else if newValue == .disconnected {
 			stop()
 		}
 	}
