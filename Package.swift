@@ -15,13 +15,12 @@ let package = Package(
     dependencies: [
 		.package(path: "../MdocSecurity18013"),
 		.package(url: "https://github.com/valpackett/SwiftCBOR.git", branch: "master"),
-		.package(url: "https://github.com/StarryInternet/CombineCoreBluetooth.git", from: "0.3.0"),
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "MdocDataTransfer18013", dependencies: ["MdocSecurity18013", "SwiftCBOR", "CombineCoreBluetooth"]),
+            name: "MdocDataTransfer18013", dependencies: ["MdocSecurity18013", "SwiftCBOR"]),
         .testTarget(
             name: "MdocDataTransfer18013Tests",
             dependencies: ["MdocDataTransfer18013"]),

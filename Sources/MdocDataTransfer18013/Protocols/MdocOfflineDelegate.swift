@@ -10,7 +10,7 @@ import MdocSecurity18013
 public protocol MdocOfflineDelegate: AnyObject {
 	func didChangeStatus(_ newStatus: TransferStatus)
 	func didFinishedWithError(_ error: Error)
-	func didReceiveRequest(_ request: [String], handleAccept: @escaping (Bool) -> Void)
+	func didReceiveRequest(_ request: [String: Any], handleAccept: @escaping (Bool) -> Void)
 }
 
 
