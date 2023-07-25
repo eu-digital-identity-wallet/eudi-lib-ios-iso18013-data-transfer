@@ -93,10 +93,10 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 			logger.info("Remote central \(central.identifier) disconnected for \(mdocCbc?.rawValue ?? "") characteristic")
 		}.store(in: &cancellables)
 		
-		peripheralManager.readyToUpdateSubscribers.receive(on: DispatchQueue.main).sink { [weak self] in
-			guard let self = self, self.remoteCentral != nil else { return }
-			self.sendDataWithUpdates() 
-		}.store(in: &cancellables)
+	//	peripheralManager.readyToUpdateSubscribers.receive(on: DispatchQueue.main).sink { [weak self] in
+	//		guard let self = self, self.remoteCentral != nil else { return }
+	//		self.sendDataWithUpdates()
+	//	}.store(in: &cancellables)
 	}
 	
 	public func performDeviceEngagement() -> UIImage? {
@@ -162,7 +162,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		if !b { error = Self.makeError(code: .userRejected) }
 		guard let bytes = getMdocResponseToSend(deviceRequest!, eReaderKey: sessionEncryption!.sessionKeys.publicKey) else { error = Self.makeError(code: .noDocumentToReturn); return }
 		prepareDataToSend(bytes)
-		DispatchQueue.main.asyncAfter(deadline: .now()+0.1, execute: { self.sendDataWithUpdates() })
+		DispatchQueue.main.asyncAfter(deadline: .now()+0.1) { self.sendDataWithUpdates() }
 	}
 	
 	static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
@@ -195,10 +195,18 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	func sendDataWithUpdates() {
-		guard sendBuffer.count > 0 else { status = .responseSent; logger.info("Finished sending BLE data"); return }
-		//logger.info("Sending \(numBlocks - sendBuffer.count + 1) out of \(numBlocks) blocks")
-		let b = peripheralManager.updateValue(sendBuffer.first!, for: server2ClientCharacteristic, onSubscribedCentrals: [remoteCentral])
-		if b { sendBuffer.removeFirst(); sendDataWithUpdates() }
+		guard sendBuffer.count > 0 else {
+			status = .responseSent; logger.info("Finished sending BLE data")
+			return
+		}
+		peripheralManager.updateValue(sendBuffer.first!, for: server2ClientCharacteristic, onSubscribedCentrals: [remoteCentral])
+			.sink(receiveCompletion: { [weak self] c in
+				guard let self = self else { return }
+				if case .finished = c {
+					if sendBuffer.count > 0 { sendBuffer.removeFirst(); DispatchQueue.main.async { self.sendDataWithUpdates() } }
+				} else { status = .disconnected }
+			}, receiveValue: {})
+			.store(in: &cancellables)
 	}
 }
 
