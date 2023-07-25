@@ -21,7 +21,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public var validRequestItems: [String: [String]]?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [DeviceResponse]!
-	public var iaca: [Data]!
+	public var iaca: [SecCertificate]!
 	@Published public var qrCodeImageData: Data?
 	public weak var delegate: (any MdocOfflineDelegate)?
 	//var cancellables = Set<AnyCancellable>()
@@ -127,7 +127,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		docs = d.compactMap { $0.decodeJSON(type: SignUpResponse.self)?.deviceResponse }
 		if docs.count == 0 { error = Self.makeError(code: .invalidInputDocument); return }
 		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
-			iaca = i
+			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
 		}
 		if let b = parameters[InitializeKeys.require_user_accept.rawValue] as? Bool {
 			requireUserAccept = b
@@ -261,7 +261,7 @@ extension MdocGattServer: MdocOfflineDelegate {
 		}
 		if let readerAuthority = request[UserRequestKeys.reader_authority.rawValue] as? String {
 			let bAuthenticated = request[UserRequestKeys.reader_authenticated.rawValue] as? Bool ?? false
-			requestItemsMessage += "\n\n\(readerAuthority) \(bAuthenticated ? "Authenticated" : "NOT authenticated")"
+			requestItemsMessage += "\n\n\(readerAuthority)\n \(bAuthenticated ? "Authenticated" : "NOT authenticated")"
 		}
 	}
 	

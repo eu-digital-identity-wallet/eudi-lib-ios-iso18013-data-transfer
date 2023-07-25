@@ -2,6 +2,7 @@
 //  MdocTransferManager.swift
 
 import Foundation
+import ASN1Decoder
 import Combine
 import SwiftCBOR
 import MdocDataModel18013
@@ -17,7 +18,7 @@ public protocol MdocTransferManager: AnyObject {
 	var validRequestItems: [String: [String]]? { get set }
 	var delegate: MdocOfflineDelegate? { get }
 	var docs: [DeviceResponse]! { get set }
-	var iaca: [Data]!  { get set }
+	var iaca: [SecCertificate]!  { get set }
 	var error: Error? { get set }
 }
 
@@ -50,8 +51,8 @@ extension MdocTransferManager {
 			var params: [String: Any] = [UserRequestKeys.items_requested.rawValue: validRequestItems]
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
-				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let cert = SecCertificateCreateWithData(nil, certData as CFData), let summary = SecCertificateCopySubjectSummary(cert), let b = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!) {
-					params[UserRequestKeys.reader_authority.rawValue] = summary as String
+				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let x509 = try? X509Certificate(der: certData), let issName = x509.issuerDistinguishedName, let b = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
+					params[UserRequestKeys.reader_authority.rawValue] = issName
 					params[UserRequestKeys.reader_authenticated.rawValue] = b
 				}
 			}
@@ -88,7 +89,7 @@ extension MdocTransferManager {
 				if errorItemsSet.count > 0 { nsErrorsToAdd[nsReq] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
 				}
 			}
-			guard let (issuerAuthDef, pk) = try IssuerAuthentication.makeDefaultIssuerAuth(for: d, iaca: iaca.first!) else { logger.error("IACA not valid"); return }
+			guard let (issuerAuthDef, pk) = try IssuerAuthentication.makeDefaultIssuerAuth(for: d, iaca: SecCertificateCopyData(iaca.first!) as! Data) else { logger.error("IACA not valid"); return }
 			let issuerAuthToAdd = d.issuerSigned.issuerAuth ?? issuerAuthDef
 			let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
 			let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: pk)
