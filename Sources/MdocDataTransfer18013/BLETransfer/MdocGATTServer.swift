@@ -16,7 +16,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	var stateCharacteristic: CBMutableCharacteristic!
 	var server2ClientCharacteristic: CBMutableCharacteristic!
 	public var deviceEngagement: DeviceEngagement?
-	var deviceRequest: DeviceRequest?
+	public var deviceRequest: DeviceRequest?
 	public var deviceResponseToSend: DeviceResponse?
 	public var validRequestItems: [String: [String]]?
 	public var sessionEncryption: SessionEncryption?

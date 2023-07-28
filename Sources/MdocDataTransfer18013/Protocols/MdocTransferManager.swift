@@ -14,6 +14,7 @@ public protocol MdocTransferManager: AnyObject {
 	var deviceEngagement: DeviceEngagement? { get }
 	var requireUserAccept: Bool { get set }
 	var sessionEncryption: SessionEncryption? { get set }
+	var deviceRequest: DeviceRequest? { get set }
 	var deviceResponseToSend: DeviceResponse? { get set }
 	var validRequestItems: [String: [String]]? { get set }
 	var delegate: MdocOfflineDelegate? { get }
@@ -56,6 +57,7 @@ extension MdocTransferManager {
 					params[UserRequestKeys.reader_authenticated.rawValue] = b
 				}
 			}
+			self.deviceRequest = deviceRequest
 			delegate?.didReceiveRequest(params, handleAccept: handler)
 			return deviceRequest
 		} catch { self.error = error}
