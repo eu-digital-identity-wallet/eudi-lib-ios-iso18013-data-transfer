@@ -79,7 +79,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 						return
 					}
 					logger.info("End received to state characteristic") // --> end
-					server.status = .responseSent
+					server.status = .disconnected
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
 				guard server.status == .connected || server.status == .started else {
@@ -136,7 +136,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	public func performDeviceEngagement() {
-		guard status == .initialized else { error = Self.makeError(code: .unexpected_error, str: "NOT initialized"); return }
+		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: "NOT initialized"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
 		sessionEncryption = nil
 		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
@@ -259,8 +259,8 @@ extension MdocGattServer: MdocOfflineDelegate {
 		for (k,v) in requestItems {
 			requestItemsMessage += "DocType: \(k)\n\n \(v.map { NSLocalizedString($0, comment: "") }.sorted().joined(separator: "\n"))"
 		}
-		if let readerAuthority = request[UserRequestKeys.reader_authority.rawValue] as? String {
-			let bAuthenticated = request[UserRequestKeys.reader_authenticated.rawValue] as? Bool ?? false
+		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
+			let bAuthenticated = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool ?? false
 			requestItemsMessage += "\n\n\(readerAuthority)\n \(bAuthenticated ? "Authenticated" : "NOT authenticated")"
 		}
 	}

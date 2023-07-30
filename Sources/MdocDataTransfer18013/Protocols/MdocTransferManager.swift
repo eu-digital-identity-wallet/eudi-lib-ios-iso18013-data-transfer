@@ -31,8 +31,9 @@ public enum InitializeKeys: String {
 
 public enum UserRequestKeys: String {
 	case items_requested
-	case reader_authority
-	case reader_authenticated
+	case reader_certificate_issuer
+	case reader_auth_validated
+	case reader_certificate_validation_message
 }
 
 extension MdocTransferManager {
@@ -52,9 +53,10 @@ extension MdocTransferManager {
 			var params: [String: Any] = [UserRequestKeys.items_requested.rawValue: validRequestItems]
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
-				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let x509 = try? X509Certificate(der: certData), let issName = x509.issuerDistinguishedName, let b = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
-					params[UserRequestKeys.reader_authority.rawValue] = issName
-					params[UserRequestKeys.reader_authenticated.rawValue] = b
+				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let x509 = try? X509Certificate(der: certData), let issName = x509.issuerDistinguishedName, let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
+					params[UserRequestKeys.reader_certificate_issuer.rawValue] = issName
+					params[UserRequestKeys.reader_auth_validated.rawValue] = b
+					if let reasonFailure { params[UserRequestKeys.reader_certificate_validation_message.rawValue] = reasonFailure }
 				}
 			}
 			self.deviceRequest = deviceRequest
