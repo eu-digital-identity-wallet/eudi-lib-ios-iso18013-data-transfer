@@ -93,7 +93,7 @@ extension MdocTransferManager {
 				if errorItemsSet.count > 0 { nsErrorsToAdd[nsReq] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
 				}
 			}
-			guard let (issuerAuthDef, pk) = try IssuerAuthentication.makeDefaultIssuerAuth(for: d, iaca: SecCertificateCopyData(iaca.first!) as! Data) else { logger.error("IACA not valid"); return }
+			guard let (issuerAuthDef, pk) = try IssuerAuthentication.makeDefaultIssuerAuth(for: d, iaca: SecCertificateCopyData(iaca.first!) as Data) else { logger.error("IACA not valid"); return }
 			let issuerAuthToAdd = d.issuerSigned.issuerAuth ?? issuerAuthDef
 			let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
 			let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: pk)
@@ -104,7 +104,7 @@ extension MdocTransferManager {
 			let docToAdd = Document(docType: docReq.itemsRequest.docType, issuerSigned: issToAdd, deviceSigned: devSignedToAdd, errors: errors)
 			docFiltered.append(docToAdd)
 		}
-		var documentErrors: [DocumentError]? = docErrors.count == 0 ? nil : docErrors.map(DocumentError.init(docErrors:))
+		let documentErrors: [DocumentError]? = docErrors.count == 0 ? nil : docErrors.map(DocumentError.init(docErrors:))
 		docToSend = DeviceResponse(version: docToSend.version, documents: docFiltered, documentErrors: documentErrors, status: 0)
 		deviceResponseToSend = docToSend
 		validRequestItems = validReqItemsDict

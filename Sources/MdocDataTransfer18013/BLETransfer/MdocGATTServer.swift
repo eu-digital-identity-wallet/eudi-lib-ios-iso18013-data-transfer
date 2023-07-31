@@ -135,13 +135,16 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		status = .initialized
 	}
 	
+	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
+	
 	public func performDeviceEngagement() {
-		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: "NOT initialized"); return }
+		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
 		sessionEncryption = nil
 		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
 		qrCodeImageData = qrCodeImage.pngData()
 		guard docs.allSatisfy({ $0.documents != nil }) else { error = Self.makeError(code: .invalidInputDocument); return }
+		guard peripheralManager.state != .unauthorized else { error = Self.makeError(code: .bleNotAuthorized); return }
 		start()
 	}
 	

@@ -21,6 +21,7 @@ public enum ErrorCode: Int, CustomStringConvertible {
 	case noDocumentToReturn
 	case userRejected
 	case requestDecodeError
+	case bleNotAuthorized
 	case unexpected_error
 	
 	public var description: String {
@@ -30,6 +31,7 @@ public enum ErrorCode: Int, CustomStringConvertible {
 		case .noDocumentToReturn: return "NO_DOCUMENT_TO_RETURN"
 		case .requestDecodeError: return "REQUEST_DECODE_ERROR"
 		case .userRejected: return "USER_REJECTED"
+		case .bleNotAuthorized: return "BLE_NOT_AUTHORIZED"
 		default: return "GENERIC_ERROR"
 		}
 	}
