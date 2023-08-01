@@ -56,7 +56,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 		
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-			logger.info(peripheral.state == .poweredOn ? "Powered on" : "Powered off")
+			logger.info(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")
 			if peripheral.state == .poweredOn, server.qrCodeImageData != nil { server.start() }
 		}
 		
@@ -136,6 +136,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
+	public var isBlePermissionDenied: Bool { peripheralManager.state == .unauthorized }
 	
 	public func performDeviceEngagement() {
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }

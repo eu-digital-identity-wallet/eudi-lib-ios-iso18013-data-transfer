@@ -22,6 +22,7 @@ public enum ErrorCode: Int, CustomStringConvertible {
 	case userRejected
 	case requestDecodeError
 	case bleNotAuthorized
+	case bleNotSupported
 	case unexpected_error
 	
 	public var description: String {
@@ -32,6 +33,7 @@ public enum ErrorCode: Int, CustomStringConvertible {
 		case .requestDecodeError: return "REQUEST_DECODE_ERROR"
 		case .userRejected: return "USER_REJECTED"
 		case .bleNotAuthorized: return "BLE_NOT_AUTHORIZED"
+		case .bleNotSupported: return "BLE_NOT_SUPPORTED"
 		default: return "GENERIC_ERROR"
 		}
 	}
