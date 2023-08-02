@@ -3,6 +3,7 @@
 
 import Foundation
 
+/// Transfer status enumeration
 public enum TransferStatus: String {
 	case initializing
 	case initialized
@@ -15,6 +16,7 @@ public enum TransferStatus: String {
 	case error
 }
 
+/// Possible error codes
 public enum ErrorCode: Int, CustomStringConvertible {
 	case documents_not_provided
 	case invalidInputDocument

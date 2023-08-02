@@ -2,13 +2,12 @@
 //  MdocGATTServer.swift
 import Foundation
 import CoreBluetooth
-import SwiftCBOR
 import UIKit
 import Logging
 import MdocDataModel18013
 import MdocSecurity18013
-//import CombineCoreBluetooth
 
+/// BLE Gatt server implementation of mdoc transfer manager
 public class MdocGattServer: ObservableObject, MdocTransferManager {
 	var peripheralManager: CBPeripheralManager!
 	var bleDelegate: Delegate!
@@ -135,16 +134,25 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		status = .initialized
 	}
 	
+	/// Returns true if the peripheralManager state is poweredOn
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
+
+	/// Returns true if the peripheralManager state is unauthorized
 	public var isBlePermissionDenied: Bool { peripheralManager.state == .unauthorized }
-	
+
+	// Create a new device engagement object and start the device engagement process.
+	///
+	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
 	public func performDeviceEngagement() {
+		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
 		sessionEncryption = nil
+		/// get qrCode image data corresponding to the device engagement
 		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
 		qrCodeImageData = qrCodeImage.pngData()
 		guard docs.allSatisfy({ $0.documents != nil }) else { error = Self.makeError(code: .invalidInputDocument); return }
+		// Check that the peripheral manager has been authorized to use Bluetooth.
 		guard peripheralManager.state != .unauthorized else { error = Self.makeError(code: .bleNotAuthorized); return }
 		start()
 	}
@@ -163,11 +171,13 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil; errorMessage = ""
+			// get the BLE UUID from the device engagement and truncate it to the first 4 characters (short UUID)
 			guard var uuid = deviceEngagement!.ble_uuid else { logger.error("BLE initialization error"); return }
 			let index = uuid.index(uuid.startIndex, offsetBy: 4)
 			uuid = String(uuid[index...].prefix(4)).uppercased()
 			buildServices(uuid: uuid)
 			let advertisementData: [String: Any] = [ CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: uuid)], CBAdvertisementDataLocalNameKey: uuid ]
+			// advertise the peripheral with the short UUID
 			peripheralManager.startAdvertising(advertisementData)
 			advertising = true
 			status = .qrEngagementReady
@@ -247,7 +257,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 }
 
-// quick implementation of delegate used for testing
+// implementation of delegate used for testing
 extension MdocGattServer: MdocOfflineDelegate {
 	
 	public func didChangeStatus(_ newStatus: MdocDataTransfer18013.TransferStatus) {

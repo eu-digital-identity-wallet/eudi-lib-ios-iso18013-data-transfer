@@ -1,12 +1,21 @@
 {
   "pins" : [
     {
-      "identity" : "combinecorebluetooth",
+      "identity" : "asn1decoder",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/StarryInternet/CombineCoreBluetooth.git",
+      "location" : "https://github.com/filom/ASN1Decoder",
       "state" : {
-        "revision" : "05df53532ba6eee30df83a20dd22c447bc223f8a",
-        "version" : "0.4.0"
+        "revision" : "65953a42a0f039f53c73e48fd88c02809f7db607",
+        "version" : "1.8.0"
+      }
+    },
+    {
+      "identity" : "eudi-lib-ios-iso18013-data-model",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
+      "state" : {
+        "branch" : "develop",
+        "revision" : "3da78b77818b4311a170897b6dbf06f0e40b2cd9"
       }
     },
     {

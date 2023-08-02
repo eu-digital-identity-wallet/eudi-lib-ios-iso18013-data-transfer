@@ -3,11 +3,11 @@
 
 import Foundation
 import ASN1Decoder
-import Combine
 import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
 
+/// Protocol for a transfer manager object used to transfer data to and from the Mdoc holder.
 public protocol MdocTransferManager: AnyObject {
 	func initialize(parameters: [String: Any])
 	var status: TransferStatus { get }
@@ -23,12 +23,14 @@ public protocol MdocTransferManager: AnyObject {
 	var error: Error? { get set }
 }
 
+/// String keys for the initialization dictionary
 public enum InitializeKeys: String {
 	case document_data
 	case trusted_certificates
 	case require_user_accept
 }
 
+/// String keys for the user request dictionary
 public enum UserRequestKeys: String {
 	case items_requested
 	case reader_certificate_issuer
@@ -37,6 +39,12 @@ public enum UserRequestKeys: String {
 }
 
 extension MdocTransferManager {
+	
+	/// Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
+	/// - Parameters:
+	///   - requestData: Request data passed to the mdoc holder
+	///   - handler: Handler to call with the accept/reject flag
+	/// - Returns: A ``DeviceRequest`` object
 	func decodeRequestAndInformUser(requestData: Data, handler: @escaping (Bool) -> Void) -> DeviceRequest? {
 		do {
 			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return nil }
@@ -66,9 +74,9 @@ extension MdocTransferManager {
 		return nil
 	}
 	
-	func getDeviceResponseToSend(_ deviceRequest: DeviceRequest, eReaderKey: CoseKey) throws {
-		guard let firstDocRequest = deviceRequest.docRequests.first else { return }
-		guard var docToSend = docs.first(where: { $0.documents!.contains(where: {d in d.docType == firstDocRequest.itemsRequest.docType }) }) else { logger.error("Transfer manager has not any doc"); return } // todo: find document and filter its data
+    @discardableResult func getDeviceResponseToSend(_ deviceRequest: DeviceRequest, eReaderKey: CoseKey) throws -> DeviceResponse? {
+		guard let firstDocRequest = deviceRequest.docRequests.first else { return nil }
+		guard var docToSend = docs.first(where: { $0.documents!.contains(where: {d in d.docType == firstDocRequest.itemsRequest.docType }) }) else { logger.error("Transfer manager has not any doc"); return nil } // todo: find document and filter its data
 		let documents = docToSend.documents!
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]](); var validReqItemsDict = [String:[String]]()
 		for docReq in deviceRequest.docRequests {
@@ -76,7 +84,7 @@ extension MdocTransferManager {
 				docErrors.append([docReq.itemsRequest.docType: UInt64(0)])
 				continue
 			}
-			guard let issuerNs = d.issuerSigned.issuerNameSpaces else { logger.error("Null issuer namespaces"); return }
+			guard let issuerNs = d.issuerSigned.issuerNameSpaces else { logger.error("Null issuer namespaces"); return nil }
 			var nsItemsToAdd = [NameSpace: [IssuerSignedItem]](); var nsErrorsToAdd = [NameSpace : ErrorItems]()
 			for (nsReq, itemsReq) in docReq.itemsRequest.requestNameSpaces.nameSpaces {
 				guard let items = issuerNs[nsReq] else {
@@ -93,12 +101,12 @@ extension MdocTransferManager {
 				if errorItemsSet.count > 0 { nsErrorsToAdd[nsReq] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
 				}
 			}
-			guard let (issuerAuthDef, pk) = try IssuerAuthentication.makeDefaultIssuerAuth(for: d, iaca: SecCertificateCopyData(iaca.first!) as Data) else { logger.error("IACA not valid"); return }
+			guard let (issuerAuthDef, pk) = try IssuerAuthentication.makeDefaultIssuerAuth(for: d, iaca: SecCertificateCopyData(iaca.first!) as Data) else { logger.error("IACA not valid"); return nil }
 			let issuerAuthToAdd = d.issuerSigned.issuerAuth ?? issuerAuthDef
 			let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
 			let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: pk)
 			let mdocAuth = MdocAuthentication(transcript: sessionEncryption!.transcript, authKeys: authKeys)
-			guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: docReq.itemsRequest.docType) else {logger.error("Cannot create device auth"); return }
+			guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: docReq.itemsRequest.docType) else {logger.error("Cannot create device auth"); return nil }
 			let devSignedToAdd = DeviceSigned(deviceAuth: devAuth)
 			let errors: Errors? = nsErrorsToAdd.count == 0 ? nil : Errors(errors: nsErrorsToAdd)
 			let docToAdd = Document(docType: docReq.itemsRequest.docType, issuerSigned: issToAdd, deviceSigned: devSignedToAdd, errors: errors)
@@ -108,6 +116,7 @@ extension MdocTransferManager {
 		docToSend = DeviceResponse(version: docToSend.version, documents: docFiltered, documentErrors: documentErrors, status: 0)
 		deviceResponseToSend = docToSend
 		validRequestItems = validReqItemsDict
+		return deviceResponseToSend
 	}
 	
 	func getMdocResponseToSend(_ deviceRequest: DeviceRequest, eReaderKey: CoseKey) -> Data? {

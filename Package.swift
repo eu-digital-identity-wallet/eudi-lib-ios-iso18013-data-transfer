@@ -14,6 +14,7 @@ let package = Package(
     ],
     dependencies: [
 		.package(path: "../MdocSecurity18013"),
+		.package(url: "https://github.com/apple/swift-log.git", branch: "main"),
 		.package(url: "https://github.com/valpackett/SwiftCBOR.git", branch: "master"),
 	],
     targets: [

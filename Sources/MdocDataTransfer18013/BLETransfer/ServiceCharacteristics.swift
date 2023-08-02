@@ -4,6 +4,9 @@ import Foundation
 import CoreBluetooth
 import SwiftCBOR
 
+/// The enum BleTransferMode defines the two roles in the communication, which can be a server or a client.
+///
+/// The four static variables are used to signal the start and the end of the communication. This is done by sending the bytes 0x01 and 0x02 for the start and end of the communication, respectively. For the start and end of the data transmission, the bytes 0x01 and 0x00 are used.
 public enum BleTransferMode {
 	case server
 	case client
