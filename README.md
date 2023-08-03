@@ -50,7 +50,7 @@ To initiate the device engagement method, use the following method:
 ```swift
 bleServerTransfer.performDeviceEngagement()
 ```
-The QR code image is available as PNG image data from the property ``qrCodeImageData`` when the ``status`` has the value ``TransferStatus.qrEngagementReady``
+The QR code image is available as PNG image data from the property ``qrCodeImageData`` when the ``status`` has the value ``TransferStatus.qrEngagementReady``.
 When user (holder) acceptance is required, the app should show the request items and the reader certificate details (if reader auth is used).
 The request dictionary in ``didReceiveRequest`` delegate method has the following parameters:
 
