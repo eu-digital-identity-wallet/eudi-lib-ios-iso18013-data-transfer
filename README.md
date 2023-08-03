@@ -1,5 +1,6 @@
 # EUDI ISO 18013-5 iOS Data Transfer library (ver 0.9.0)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Swift](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer/actions/workflows/swift.yml/badge.svg)](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer/actions/workflows/swift.yml)
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer&metric=ncloc&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer)
 [![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer&metric=duplicated_lines_density&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer&metric=reliability_rating&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer)
@@ -49,7 +50,7 @@ To initiate the device engagement method, use the following method:
 ```swift
 bleServerTransfer.performDeviceEngagement()
 ```
-The QR code image is available as PNG image data when the ``status`` has the value ``TransferStatus.qrEngagementReady``
+The QR code image is available as PNG image data from the property ``qrCodeImageData`` when the ``status`` has the value ``TransferStatus.qrEngagementReady``
 When user (holder) acceptance is required, the app should show the request items and the reader certificate details (if reader auth is used).
 The request dictionary in ``didReceiveRequest`` delegate method has the following parameters:
 
