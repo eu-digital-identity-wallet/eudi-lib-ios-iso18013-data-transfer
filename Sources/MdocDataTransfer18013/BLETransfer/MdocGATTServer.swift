@@ -2,7 +2,9 @@
 //  MdocGATTServer.swift
 import Foundation
 import CoreBluetooth
+#if canImport(UIKit)
 import UIKit
+#endif
 import Logging
 import MdocDataModel18013
 import MdocSecurity18013
@@ -148,9 +150,11 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
 		sessionEncryption = nil
+		#if os(iOS)
 		/// get qrCode image data corresponding to the device engagement
 		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
 		qrCodeImageData = qrCodeImage.pngData()
+		#endif
 		guard docs.allSatisfy({ $0.documents != nil }) else { error = Self.makeError(code: .invalidInputDocument); return }
 		// Check that the peripheral manager has been authorized to use Bluetooth.
 		guard peripheralManager.state != .unauthorized else { error = Self.makeError(code: .bleNotAuthorized); return }

@@ -47,6 +47,8 @@ public class Helpers {
 		return (chunk,bEnd)
 	}
 	
+	#if os(iOS)
+	
 	/// Check if BLE access is allowed, and if not, present a dialog that opens settings
 	/// - Parameters:
 	///   - vc: The view controller that will present the settings
@@ -123,4 +125,6 @@ public class Helpers {
 		}
 		return base
 	}
+	
+	#endif
 }

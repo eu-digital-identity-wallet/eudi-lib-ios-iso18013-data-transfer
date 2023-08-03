@@ -8,7 +8,8 @@ final class MdocDataTransfer18013Tests: XCTestCase {
 	// https://developer.apple.com/documentation/xctest/defining_test_cases_and_test_methods
 	
 	func test_uuids() {
-		print(logger.logLevel)
-		print(MdocServiceCharacteristic.state.uuid)
+		XCTAssertEqual(MdocServiceCharacteristic.state.uuid.uuidString, "00000001-A123-48CE-896B-4C76973373E6")
+		XCTAssertEqual(MdocServiceCharacteristic.client2Server.uuid.uuidString, "00000002-A123-48CE-896B-4C76973373E6")
+		XCTAssertEqual(MdocServiceCharacteristic.server2Client.uuid.uuidString, "00000003-A123-48CE-896B-4C76973373E6")
 	}
 }
