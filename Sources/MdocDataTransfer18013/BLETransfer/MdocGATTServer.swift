@@ -29,17 +29,11 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	@Published public var advertising: Bool = false
 	@Published public var error: Error? = nil  { willSet { handleErrorSet(newValue) }}
 	@Published public var status: TransferStatus = .initializing { willSet { handleStatusChange(newValue) }}
-	@Published public var statusDescription: String = ""
 	public var requireUserAccept = false
 	var readBuffer = Data()
 	var sendBuffer = [Data]()
 	var numBlocks: Int = 0
-	// default delegate
-	@Published public var hasRequestPresented: Bool = false
-	@Published public var requestItemsMessage: String = ""
-	@Published public var hasError: Bool = false
-	@Published public var errorMessage: String = ""
-	public var handleAccept: (Bool) -> Void = { _ in }
+	var subscribeCount: Int = 0
 
 	public init() {
 	}
@@ -53,7 +47,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 		
 		func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-			if server.sendBuffer.count > 0 { server.sendDataWithUpdates() }
+			if server.sendBuffer.count > 0 { self.server.sendDataWithUpdates() }
 		}
 		
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
@@ -105,7 +99,8 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 			let mdocCbc = MdocServiceCharacteristic(uuid: characteristic.uuid)
 			logger.info("Remote central \(central.identifier) connected for \(mdocCbc?.rawValue ?? "") characteristic")
 			server.remoteCentral = central
-			if characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid { server.status = .connected }
+			if characteristic.uuid == MdocServiceCharacteristic.state.uuid || characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid { server.subscribeCount += 1 }
+			if server.subscribeCount > 1 { server.status = .connected }
 		}
 		
 		public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
@@ -174,7 +169,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	func start() {
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
-			error = nil; errorMessage = ""
+			error = nil
 			// get the BLE UUID from the device engagement and truncate it to the first 4 characters (short UUID)
 			guard var uuid = deviceEngagement!.ble_uuid else { logger.error("BLE initialization error"); return }
 			let index = uuid.index(uuid.startIndex, offsetBy: 4)
@@ -193,23 +188,23 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	
 	public func stop() {
 		if peripheralManager.isAdvertising {	peripheralManager.stopAdvertising() }
-		peripheralManager.removeAllServices()
 		qrCodeImageData = nil
 		advertising = false
+		subscribeCount = 0
 	}
 	
 	func handleStatusChange(_ newValue: TransferStatus) {
 		logger.log(level: .info, "Transfer status will change to \(newValue)")
 		delegate?.didChangeStatus(newValue)
-		statusDescription = "\(newValue)"
 		if newValue == .requestReceived {
 			peripheralManager.stopAdvertising()
 			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, handler: userAccepted)
 			if deviceRequest == nil { error = Self.makeError(code: .requestDecodeError) }
 			if requireUserAccept == false { userAccepted(true) }
 		}
-		else if newValue == .started {
-		///	DispatchQueue.main.asyncAfter(deadline: .now() + 300, execute: { self.status = .disconnected })
+		else if newValue == .initialized {
+			subscribeCount = 0
+			peripheralManager.removeAllServices()
 		} else if newValue == .disconnected && status != .disconnected {
 			stop()
 		}
@@ -261,30 +256,3 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 }
 
-// implementation of delegate used for testing
-extension MdocGattServer: MdocOfflineDelegate {
-	
-	public func didChangeStatus(_ newStatus: MdocDataTransfer18013.TransferStatus) {
-	}
-	
-	public func didReceiveRequest(_ request: [String:Any], handleAccept: @escaping (Bool) -> Void) {
-		guard requireUserAccept else { return }
-		hasRequestPresented = true
-		self.handleAccept = handleAccept
-		guard let requestItems = request[UserRequestKeys.items_requested.rawValue] as? [String:[String]] else {
-			error = Self.makeError(code: .requestDecodeError); return
-		}
-		for (k,v) in requestItems {
-			requestItemsMessage += "DocType: \(k)\n\n \(v.map { NSLocalizedString($0, comment: "") }.sorted().joined(separator: "\n"))"
-		}
-		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
-			let bAuthenticated = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool ?? false
-			requestItemsMessage += "\n\n\(readerAuthority)\n \(bAuthenticated ? "Authenticated" : "NOT authenticated")"
-		}
-	}
-	
-	public func didFinishedWithError(_ error: Error) {
-		hasError = true
-		errorMessage = error.localizedDescription
-	}
-}

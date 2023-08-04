@@ -68,7 +68,7 @@ extension MdocTransferManager {
 				}
 			}
 			self.deviceRequest = deviceRequest
-			delegate?.didReceiveRequest(params, handleAccept: handler)
+			if requireUserAccept { delegate?.didReceiveRequest(params, handleAccept: handler) }
 			return deviceRequest
 		} catch { self.error = error}
 		return nil
