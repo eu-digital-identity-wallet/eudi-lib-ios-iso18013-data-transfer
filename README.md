@@ -19,7 +19,7 @@ var bleServerTransfer =	MdocGattServer()
 The BLE server needs to be initialized with a dictionary. The parameters are:
 |Key | Value|
 |--- | ---|
-|document_data|Array of documents serialized as DeviceResponse CBOR|
+|document_data|Array of documents Base64-serialized as described [here](wiki/SAMPLE_DATA.md) |
 |trusted_certificates|Array of trusted certificates of reader authentication|
 |require_user_accept|True if holder acceptance is required to send the requested data|
 
