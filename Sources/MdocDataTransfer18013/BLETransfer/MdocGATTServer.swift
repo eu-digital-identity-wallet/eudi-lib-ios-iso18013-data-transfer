@@ -23,6 +23,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [DeviceResponse]!
 	public var iaca: [SecCertificate]!
+	public var devicePrivateKey: CoseKeyPrivate!
 	@Published public var qrCodeImageData: Data?
 	public weak var delegate: (any MdocOfflineDelegate)?
 	//var cancellables = Set<AnyCancellable>()
@@ -120,7 +121,10 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		guard let d = parameters[InitializeKeys.document_data.rawValue] as? [Data] else {
 			error = Self.makeError(code: .documents_not_provided); return
 		}
-		docs = d.compactMap { $0.decodeJSON(type: SignUpResponse.self)?.deviceResponse }
+		// load json sample data here
+		let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
+		docs = sampleData.compactMap { $0.deviceResponse }
+		devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
 		if docs.count == 0 { error = Self.makeError(code: .invalidInputDocument); return }
 		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
 			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
@@ -198,9 +202,9 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		delegate?.didChangeStatus(newValue)
 		if newValue == .requestReceived {
 			peripheralManager.stopAdvertising()
-			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, handler: userAccepted)
+			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, devicePrivateKey: devicePrivateKey, handler: userAccepted)
 			if deviceRequest == nil { error = Self.makeError(code: .requestDecodeError) }
-			if requireUserAccept == false { userAccepted(true) }
+			if requireUserAccept == false || _isDebugAssertConfiguration() { userAccepted(true) }
 		}
 		else if newValue == .initialized {
 			subscribeCount = 0
