@@ -59,11 +59,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
 			if requests[0].characteristic.uuid == MdocServiceCharacteristic.state.uuid, let h = requests[0].value?.first {
 				if h == BleTransferMode.START_REQUEST.first! {
-					guard server.status == .connected else {
-						logger.error("State START command rejected. Not in connected state")
-						peripheral.respond(to: requests[0], withResult: .unlikelyError);
-						return
-					}
 					logger.info("Start request received to state characteristic") // --> start
 					server.status = .started
 					server.readBuffer.removeAll()
@@ -78,11 +73,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 					server.status = .disconnected
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
-				guard server.status == .connected || server.status == .started else {
-					logger.error("client2Server command rejected. Not in connected or started state")
-					peripheral.respond(to: requests[0], withResult: .unlikelyError);
-					return
-				}
 				for r in requests {
 					guard let data = r.value, let h = data.first else { continue }
 					let bStart = h == BleTransferMode.START_DATA.first!
