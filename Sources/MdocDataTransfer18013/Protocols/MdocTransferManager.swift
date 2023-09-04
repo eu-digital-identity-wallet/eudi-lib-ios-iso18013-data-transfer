@@ -126,7 +126,7 @@ extension MdocTransferManager {
 			let cborToSend = docToSend.toCBOR(options: CBOROptions())
 			let clearBytesToSend = cborToSend.encode()
 			guard let cipherData = try sessionEncryption.encrypt(clearBytesToSend) else { return nil }
-			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 20 : 0)
+			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 0 : 20)
 			return Data(sd.encode(options: CBOROptions()))
 		} catch { self.error = error}
 		return nil
