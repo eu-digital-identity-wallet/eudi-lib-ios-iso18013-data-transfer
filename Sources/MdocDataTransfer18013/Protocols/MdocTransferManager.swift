@@ -97,7 +97,8 @@ extension MdocTransferManager {
 				let itemsReqSet = Set(itemsReq.elementIdentifiers)
 				let itemsSet = Set(items.map(\.elementIdentifier))
 				var itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
-				if let selectedItems, let selectedDocItems = selectedItems[docReq.itemsRequest.docType], let selectedNsItems = selectedDocItems[nsReq] {
+				if let selectedItems {
+					let selectedNsItems = selectedItems[docReq.itemsRequest.docType]?[nsReq] ?? []
 					itemsToAdd = itemsToAdd.filter({ selectedNsItems.contains($0.elementIdentifier) })
 				}
 				if itemsToAdd.count > 0 {
