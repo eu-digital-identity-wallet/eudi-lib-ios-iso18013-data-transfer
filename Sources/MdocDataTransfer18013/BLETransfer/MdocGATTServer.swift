@@ -19,13 +19,13 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public var deviceEngagement: DeviceEngagement?
 	public var deviceRequest: DeviceRequest?
 	public var deviceResponseToSend: DeviceResponse?
-	public var validRequestItems: [String: [String]]?
+	public var validRequestItems: RequestItems?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [DeviceResponse]!
 	public var iaca: [SecCertificate]!
+	public var devicePrivateKey: CoseKeyPrivate!
 	@Published public var qrCodeImageData: Data?
 	public weak var delegate: (any MdocOfflineDelegate)?
-	//var cancellables = Set<AnyCancellable>()
 	@Published public var advertising: Bool = false
 	@Published public var error: Error? = nil  { willSet { handleErrorSet(newValue) }}
 	@Published public var status: TransferStatus = .initializing { willSet { handleStatusChange(newValue) }}
@@ -35,7 +35,8 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	var numBlocks: Int = 0
 	var subscribeCount: Int = 0
 
-	public init() {
+	public init(status: TransferStatus = .initializing) {
+		self.status = status
 	}
 	
 	@objc(CBPeripheralManagerDelegate)
@@ -58,11 +59,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
 			if requests[0].characteristic.uuid == MdocServiceCharacteristic.state.uuid, let h = requests[0].value?.first {
 				if h == BleTransferMode.START_REQUEST.first! {
-					guard server.status == .connected else {
-						logger.error("State START command rejected. Not in connected state")
-						peripheral.respond(to: requests[0], withResult: .unlikelyError);
-						return
-					}
 					logger.info("Start request received to state characteristic") // --> start
 					server.status = .started
 					server.readBuffer.removeAll()
@@ -77,11 +73,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 					server.status = .disconnected
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
-				guard server.status == .connected || server.status == .started else {
-					logger.error("client2Server command rejected. Not in connected or started state")
-					peripheral.respond(to: requests[0], withResult: .unlikelyError);
-					return
-				}
 				for r in requests {
 					guard let data = r.value, let h = data.first else { continue }
 					let bStart = h == BleTransferMode.START_DATA.first!
@@ -110,6 +101,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	public func initialize(parameters: [String: Any]) {
+		guard !isPreview else { return }
 		bleDelegate = Delegate(server: self)
 #if os(tvOS) || os(watchOS)
 		peripheralManager = CBPeripheralManager(); peripheralManager.delegate = bleDelegate
@@ -120,7 +112,10 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		guard let d = parameters[InitializeKeys.document_data.rawValue] as? [Data] else {
 			error = Self.makeError(code: .documents_not_provided); return
 		}
-		docs = d.compactMap { $0.decodeJSON(type: SignUpResponse.self)?.deviceResponse }
+		// load json sample data here
+		let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
+		docs = sampleData.compactMap { $0.deviceResponse }
+		devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
 		if docs.count == 0 { error = Self.makeError(code: .invalidInputDocument); return }
 		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
 			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
@@ -141,6 +136,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	///
 	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
 	public func performDeviceEngagement() {
+		guard !isPreview else { return }
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
@@ -167,6 +163,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	func start() {
+		guard !isPreview else { return }
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil
@@ -187,6 +184,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	public func stop() {
+		guard !isPreview else { return }
 		if peripheralManager.isAdvertising {	peripheralManager.stopAdvertising() }
 		qrCodeImageData = nil
 		advertising = false
@@ -194,13 +192,14 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	func handleStatusChange(_ newValue: TransferStatus) {
+		guard !isPreview else { return }
 		logger.log(level: .info, "Transfer status will change to \(newValue)")
 		delegate?.didChangeStatus(newValue)
 		if newValue == .requestReceived {
 			peripheralManager.stopAdvertising()
-			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, handler: userAccepted)
+			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, devicePrivateKey: devicePrivateKey, handler: userSelected)
 			if deviceRequest == nil { error = Self.makeError(code: .requestDecodeError) }
-			if requireUserAccept == false { userAccepted(true) }
+			if requireUserAccept == false /*|| _isDebugAssertConfiguration() */ { userSelected(true, nil) }
 		}
 		else if newValue == .initialized {
 			subscribeCount = 0
@@ -210,9 +209,18 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 	}
 	
-	public func userAccepted(_ b: Bool) {
+	var isPreview: Bool {
+			return ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+	}
+	
+	public func userSelected(_ b: Bool, _ items: RequestItems?) {
 		if !b { error = Self.makeError(code: .userRejected) }
-		guard let bytes = getMdocResponseToSend(deviceRequest!, eReaderKey: sessionEncryption!.sessionKeys.publicKey) else { error = Self.makeError(code: .noDocumentToReturn); return }
+		if let items {
+			do {
+				try getDeviceResponseToSend(deviceRequest!, selectedItems: items, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey)
+			} catch { self.error = error }
+		}
+		guard let bytes = getSessionDataToSend(deviceRequest!, eReaderKey: sessionEncryption!.sessionKeys.publicKey) else { error = Self.makeError(code: .noDocumentToReturn); return }
 		prepareDataToSend(bytes)
 		DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { self.sendDataWithUpdates() }
 	}
