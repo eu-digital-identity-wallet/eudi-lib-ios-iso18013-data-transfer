@@ -104,20 +104,19 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public func initialize(parameters: [String: Any]) {
 		guard !isPreview else { return }
 		bleDelegate = Delegate(server: self)
-#if os(tvOS) || os(watchOS)
-		peripheralManager = CBPeripheralManager(); peripheralManager.delegate = bleDelegate
-#else
 		peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil)
-#endif
-
-		guard let d = parameters[InitializeKeys.document_data.rawValue] as? [Data] else {
-			error = Self.makeError(code: .documents_not_provided); return
+		if let d = parameters[InitializeKeys.document_json_data.rawValue] as? [Data] {
+			// load json sample data here
+			let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
+			docs = sampleData.compactMap { $0.deviceResponse }
+			devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
+		} else if let drs = parameters[InitializeKeys.document_signup_response_data.rawValue] as? [DeviceResponse], let dpk = parameters[InitializeKeys.device_private_key.rawValue] as? CoseKeyPrivate {
+			docs = drs
+			devicePrivateKey = dpk
 		}
-		// load json sample data here
-		let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
-		docs = sampleData.compactMap { $0.deviceResponse }
-		devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
+		if docs == nil { error = Self.makeError(code: .documents_not_provided); return }
 		if docs.count == 0 { error = Self.makeError(code: .invalidInputDocument); return }
+		if devicePrivateKey == nil { error = Self.makeError(code: .device_private_key_not_provided); return }
 		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
 			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
 		}

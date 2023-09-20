@@ -28,7 +28,9 @@ public protocol MdocTransferManager: AnyObject {
 
 /// String keys for the initialization dictionary
 public enum InitializeKeys: String {
-	case document_data
+	case document_json_data
+	case document_signup_response_data
+	case device_private_key
 	case trusted_certificates
 	case require_user_accept
 }
