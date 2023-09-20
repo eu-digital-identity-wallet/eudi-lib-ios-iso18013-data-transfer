@@ -19,6 +19,7 @@ public protocol MdocTransferManager: AnyObject {
 	var deviceRequest: DeviceRequest? { get set }
 	var deviceResponseToSend: DeviceResponse? { get set }
 	var validRequestItems: RequestItems? { get set }
+	var errorRequestItems: RequestItems? { get set }
 	var delegate: MdocOfflineDelegate? { get }
 	var docs: [DeviceResponse]! { get set }
 	var iaca: [SecCertificate]!  { get set }
@@ -34,7 +35,8 @@ public enum InitializeKeys: String {
 
 /// String keys for the user request dictionary
 public enum UserRequestKeys: String {
-	case items_requested
+	case valid_items_requested
+	case error_items_requested
 	case reader_certificate_issuer
 	case reader_auth_validated
 	case reader_certificate_validation_message
@@ -59,8 +61,8 @@ extension MdocTransferManager {
 			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return nil }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return nil }
 			try getDeviceResponseToSend(deviceRequest, selectedItems: nil, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey)
-			guard let validRequestItems else { logger.error("Valid request items nil"); return nil }
-			var params: [String: Any] = [UserRequestKeys.items_requested.rawValue: validRequestItems]
+			guard let validRequestItems, let errorRequestItems else { logger.error("Valid request items nil"); return nil }
+			var params: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: validRequestItems, UserRequestKeys.error_items_requested.rawValue: errorRequestItems]
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
 				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let x509 = try? X509Certificate(der: certData), let issName = x509.issuerDistinguishedName, let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
@@ -79,16 +81,18 @@ extension MdocTransferManager {
 	@discardableResult func getDeviceResponseToSend(_ deviceRequest: DeviceRequest, selectedItems: RequestItems?, eReaderKey: CoseKey, devicePrivateKey: CoseKeyPrivate) throws -> DeviceResponse? {
 		let documents = docs.flatMap { $0.documents! }
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]]()
-		var validReqItemsDocDict = RequestItems()
+		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
 		for docReq in deviceRequest.docRequests {
-			guard let d = documents.findDoc(name: docReq.itemsRequest.docType) else {
+			guard let doc = documents.findDoc(name: docReq.itemsRequest.docType) else {
 				docErrors.append([docReq.itemsRequest.docType: UInt64(0)])
+				errorReqItemsDocDict[docReq.itemsRequest.docType] = [:]
 				continue
 			}
-			guard let issuerNs = d.issuerSigned.issuerNameSpaces else { logger.error("Null issuer namespaces"); return nil }
+			guard let issuerNs = doc.issuerSigned.issuerNameSpaces else { logger.error("Null issuer namespaces"); return nil }
 			var nsItemsToAdd = [NameSpace: [IssuerSignedItem]]()
 			var nsErrorsToAdd = [NameSpace : ErrorItems]()
 			var validReqItemsNsDict = [NameSpace: [String]]()
+			// for each request namespace
 			for (nsReq, itemsReq) in docReq.itemsRequest.requestNameSpaces.nameSpaces {
 				guard let items = issuerNs[nsReq] else {
 					nsErrorsToAdd[nsReq] = itemsReq.dataElements.mapValues { _ in 0 }
@@ -106,10 +110,11 @@ extension MdocTransferManager {
 					validReqItemsNsDict[nsReq] = itemsToAdd.map(\.elementIdentifier)
 				}
 				let errorItemsSet = itemsReqSet.subtracting(itemsSet)
-				if errorItemsSet.count > 0 { nsErrorsToAdd[nsReq] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
+				if errorItemsSet.count > 0 { 
+					nsErrorsToAdd[nsReq] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
 				}
 			} // end ns for
-			let issuerAuthToAdd = d.issuerSigned.issuerAuth
+			let issuerAuthToAdd = doc.issuerSigned.issuerAuth
 			let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
 			let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: devicePrivateKey)
 			let mdocAuth = MdocAuthentication(transcript: sessionEncryption!.transcript, authKeys: authKeys)
@@ -119,10 +124,11 @@ extension MdocTransferManager {
 			let docToAdd = Document(docType: docReq.itemsRequest.docType, issuerSigned: issToAdd, deviceSigned: devSignedToAdd, errors: errors)
 			docFiltered.append(docToAdd)
 			validReqItemsDocDict[docReq.itemsRequest.docType] = validReqItemsNsDict
+			errorReqItemsDocDict[docReq.itemsRequest.docType] = nsErrorsToAdd.mapValues { Array($0.keys) }
 		} // end doc for
 		let documentErrors: [DocumentError]? = docErrors.count == 0 ? nil : docErrors.map(DocumentError.init(docErrors:))
 		deviceResponseToSend = DeviceResponse(version: docs.first!.version, documents: docFiltered, documentErrors: documentErrors, status: 0)
-		validRequestItems = validReqItemsDocDict
+		validRequestItems = validReqItemsDocDict; errorRequestItems = errorReqItemsDocDict
 		return deviceResponseToSend
 	}
 	

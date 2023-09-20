@@ -20,6 +20,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public var deviceRequest: DeviceRequest?
 	public var deviceResponseToSend: DeviceResponse?
 	public var validRequestItems: RequestItems?
+	public var errorRequestItems: RequestItems?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [DeviceResponse]!
 	public var iaca: [SecCertificate]!
