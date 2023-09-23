@@ -21,9 +21,11 @@ public class DefaultTransferDelegate: ObservableObject, MdocOfflineDelegate {
 	@Published public var hasError: Bool = false
 	@Published public var errorMessage: String = ""
 	@Published public var selectedRequestItems: [DocElementsViewModel] = []
+	@Published public var status: TransferStatus = .initializing
 	public var handleSelected: (Bool, RequestItems?) -> Void = { _,_ in }
 	
 	public func didChangeStatus(_ newStatus: TransferStatus) {
+		status = newStatus
 	}
 	
 	public func didReceiveRequest(_ request: [String: Any], handleSelected: @escaping (Bool, RequestItems?) -> Void) {

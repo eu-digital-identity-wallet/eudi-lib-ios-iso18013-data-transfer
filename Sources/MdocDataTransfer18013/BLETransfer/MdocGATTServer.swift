@@ -101,31 +101,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 	}
 	
-	public func initialize(parameters: [String: Any]) {
-		guard !isPreview else { return }
-		bleDelegate = Delegate(server: self)
-		peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil)
-		if let d = parameters[InitializeKeys.document_json_data.rawValue] as? [Data] {
-			// load json sample data here
-			let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
-			docs = sampleData.compactMap { $0.deviceResponse }
-			devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
-		} else if let drs = parameters[InitializeKeys.document_signup_response_data.rawValue] as? [DeviceResponse], let dpk = parameters[InitializeKeys.device_private_key.rawValue] as? CoseKeyPrivate {
-			docs = drs
-			devicePrivateKey = dpk
-		}
-		if docs == nil { error = Self.makeError(code: .documents_not_provided); return }
-		if docs.count == 0 { error = Self.makeError(code: .invalidInputDocument); return }
-		if devicePrivateKey == nil { error = Self.makeError(code: .device_private_key_not_provided); return }
-		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
-			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
-		}
-		if let b = parameters[InitializeKeys.require_user_accept.rawValue] as? Bool {
-			requireUserAccept = b
-		}
-		status = .initialized
-	}
-	
 	/// Returns true if the peripheralManager state is poweredOn
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
 
@@ -202,8 +177,9 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 			if requireUserAccept == false /*|| _isDebugAssertConfiguration() */ { userSelected(true, nil) }
 		}
 		else if newValue == .initialized {
+			bleDelegate = Delegate(server: self)
+			peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil)
 			subscribeCount = 0
-			peripheralManager.removeAllServices()
 		} else if newValue == .disconnected && status != .disconnected {
 			stop()
 		}
@@ -214,6 +190,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	public func userSelected(_ b: Bool, _ items: RequestItems?) {
+		status = .userSelected
 		if !b { error = Self.makeError(code: .userRejected) }
 		if let items {
 			do {
@@ -223,12 +200,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		guard let bytes = getSessionDataToSend(deviceRequest!, eReaderKey: sessionEncryption!.sessionKeys.publicKey) else { error = Self.makeError(code: .noDocumentToReturn); return }
 		prepareDataToSend(bytes)
 		DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { self.sendDataWithUpdates() }
-	}
-	
-	static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
-		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
-		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
-		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage])
 	}
 	
 	func handleErrorSet(_ newValue: Error?) {

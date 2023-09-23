@@ -11,6 +11,7 @@ public enum TransferStatus: String {
 	case connected
 	case started
 	case requestReceived
+	case userSelected
 	case responseSent
 	case disconnected
 	case error

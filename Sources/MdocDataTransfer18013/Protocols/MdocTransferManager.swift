@@ -6,13 +6,13 @@ import ASN1Decoder
 import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
-
+import Logging
 
 public typealias RequestItems = [String: [String: [String]]]
 /// Protocol for a transfer manager object used to transfer data to and from the Mdoc holder.
 public protocol MdocTransferManager: AnyObject {
 	func initialize(parameters: [String: Any])
-	var status: TransferStatus { get }
+	var status: TransferStatus { get set }
 	var deviceEngagement: DeviceEngagement? { get }
 	var requireUserAccept: Bool { get set }
 	var sessionEncryption: SessionEncryption? { get set }
@@ -22,6 +22,7 @@ public protocol MdocTransferManager: AnyObject {
 	var errorRequestItems: RequestItems? { get set }
 	var delegate: MdocOfflineDelegate? { get }
 	var docs: [DeviceResponse]! { get set }
+	var devicePrivateKey: CoseKeyPrivate! { get set }
 	var iaca: [SecCertificate]!  { get set }
 	var error: Error? { get set }
 }
@@ -45,6 +46,28 @@ public enum UserRequestKeys: String {
 }
 
 extension MdocTransferManager {
+	
+	public func initialize(parameters: [String: Any]) {
+		if let d = parameters[InitializeKeys.document_json_data.rawValue] as? [Data] {
+			// load json sample data here
+			let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
+			docs = sampleData.compactMap { $0.deviceResponse }
+			devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
+		} else if let drs = parameters[InitializeKeys.document_signup_response_data.rawValue] as? [DeviceResponse], let dpk = parameters[InitializeKeys.device_private_key.rawValue] as? CoseKeyPrivate {
+			docs = drs
+			devicePrivateKey = dpk
+		}
+		if docs == nil { error = Self.makeError(code: .documents_not_provided); return }
+		if docs.count == 0 { error = Self.makeError(code: .invalidInputDocument); return }
+		if devicePrivateKey == nil { error = Self.makeError(code: .device_private_key_not_provided); return }
+		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
+			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
+		}
+		if let b = parameters[InitializeKeys.require_user_accept.rawValue] as? Bool {
+			requireUserAccept = b
+		}
+		status = .initialized
+	}
 	
 	/// Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
 	/// - Parameters:
@@ -147,4 +170,11 @@ extension MdocTransferManager {
 		} catch { self.error = error}
 		return nil
 	}
+		
+	static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
+		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
+		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
+		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage])
+	}
+
 }
