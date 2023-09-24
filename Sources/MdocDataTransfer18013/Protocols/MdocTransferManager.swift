@@ -12,6 +12,8 @@ public typealias RequestItems = [String: [String: [String]]]
 /// Protocol for a transfer manager object used to transfer data to and from the Mdoc holder.
 public protocol MdocTransferManager: AnyObject {
 	func initialize(parameters: [String: Any])
+	func performDeviceEngagement()
+	func stop()
 	var status: TransferStatus { get set }
 	var deviceEngagement: DeviceEngagement? { get }
 	var requireUserAccept: Bool { get set }
@@ -20,7 +22,7 @@ public protocol MdocTransferManager: AnyObject {
 	var deviceResponseToSend: DeviceResponse? { get set }
 	var validRequestItems: RequestItems? { get set }
 	var errorRequestItems: RequestItems? { get set }
-	var delegate: MdocOfflineDelegate? { get }
+	var delegate: MdocOfflineDelegate? { get set }
 	var docs: [DeviceResponse]! { get set }
 	var devicePrivateKey: CoseKeyPrivate! { get set }
 	var iaca: [SecCertificate]!  { get set }
@@ -73,15 +75,19 @@ extension MdocTransferManager {
 	/// - Parameters:
 	///   - requestData: Request data passed to the mdoc holder
 	///   - handler: Handler to call with the accept/reject flag
+	///   - devicePrivateKey: Device private key
+	///   - readerKeyRawData: reader key cbor data (if reader engagement is used)
 	/// - Returns: A ``DeviceRequest`` object
-	func decodeRequestAndInformUser(requestData: Data, devicePrivateKey: CoseKeyPrivate, handler: @escaping (Bool, RequestItems?) -> Void) -> DeviceRequest? {
+	public func decodeRequestAndInformUser(requestData: Data, devicePrivateKey: CoseKeyPrivate, readerKeyRawData: [UInt8]?, handOver: CBOR, handler: @escaping (Bool, RequestItems?) -> Void) -> DeviceRequest? {
 		do {
 			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return nil }
-			guard let se = SessionEstablishment(cbor: seCbor), se.eReaderKey != nil else { logger.error("Request Data cannot be decoded to session establisment"); return nil }
+			guard var se = SessionEstablishment(cbor: seCbor) else { logger.error("Request Data cannot be decoded to session establisment"); return nil }
+			if se.eReaderKeyRawData == nil, let readerKeyRawData { se.eReaderKeyRawData = readerKeyRawData }
+			guard se.eReaderKey != nil else { logger.error("Reader key not available"); return nil }
 			let requestCipherData = se.data
 			guard let deviceEngagement else { logger.error("Device Engagement not initialized"); return nil }
 			// init session-encryption object from session establish message and device engagement, decrypt data
-			sessionEncryption = SessionEncryption(se: se, de: deviceEngagement, handOver: BleTransferMode.QRHandover)
+			sessionEncryption = SessionEncryption(se: se, de: deviceEngagement, handOver: handOver)
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
 			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return nil }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return nil }
@@ -103,7 +109,7 @@ extension MdocTransferManager {
 		return nil
 	}
 	
-	@discardableResult func getDeviceResponseToSend(_ deviceRequest: DeviceRequest, selectedItems: RequestItems?, eReaderKey: CoseKey, devicePrivateKey: CoseKeyPrivate) throws -> DeviceResponse? {
+	@discardableResult public func getDeviceResponseToSend(_ deviceRequest: DeviceRequest, selectedItems: RequestItems?, eReaderKey: CoseKey, devicePrivateKey: CoseKeyPrivate) throws -> DeviceResponse? {
 		let documents = docs.flatMap { $0.documents! }
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
@@ -157,7 +163,7 @@ extension MdocTransferManager {
 		return deviceResponseToSend
 	}
 	
-	func getSessionDataToSend(_ deviceRequest: DeviceRequest, eReaderKey: CoseKey) -> Data? {
+	public func getSessionDataToSend(_ deviceRequest: DeviceRequest, eReaderKey: CoseKey) -> Data? {
 		do {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
 			guard let docToSend = deviceResponseToSend else { logger.error("Response to send not created"); return nil }
@@ -170,11 +176,11 @@ extension MdocTransferManager {
 		} catch { self.error = error}
 		return nil
 	}
-		
-	static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
+	
+	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
 		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
 		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
 		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage])
 	}
-
+	
 }
