@@ -27,6 +27,7 @@ public protocol MdocTransferManager: AnyObject {
 	var devicePrivateKey: CoseKeyPrivate! { get set }
 	var iaca: [SecCertificate]!  { get set }
 	var error: Error? { get set }
+	var readerName: String? { get set }
 }
 
 /// String keys for the initialization dictionary

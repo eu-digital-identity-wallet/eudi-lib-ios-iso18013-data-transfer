@@ -26,6 +26,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public var docs: [DeviceResponse]!
 	public var iaca: [SecCertificate]!
 	public var devicePrivateKey: CoseKeyPrivate!
+	public var readerName: String?
 	@Published public var qrCodeImageData: Data?
 	public weak var delegate: (any MdocOfflineDelegate)?
 	@Published public var advertising: Bool = false
