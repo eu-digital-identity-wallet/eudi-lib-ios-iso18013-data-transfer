@@ -16,6 +16,7 @@ limitations under the License.
 
 //  MdocGATTServer.swift
 import Foundation
+import SwiftCBOR
 import CoreBluetooth
 #if canImport(UIKit)
 import UIKit
@@ -35,10 +36,12 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	public var deviceRequest: DeviceRequest?
 	public var deviceResponseToSend: DeviceResponse?
 	public var validRequestItems: RequestItems?
+	public var errorRequestItems: RequestItems?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [DeviceResponse]!
 	public var iaca: [SecCertificate]!
 	public var devicePrivateKey: CoseKeyPrivate!
+	public var readerName: String?
 	@Published public var qrCodeImageData: Data?
 	public weak var delegate: (any MdocOfflineDelegate)?
 	@Published public var advertising: Bool = false
@@ -49,7 +52,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	var sendBuffer = [Data]()
 	var numBlocks: Int = 0
 	var subscribeCount: Int = 0
-
+	
 	public init(status: TransferStatus = .initializing) {
 		self.status = status
 	}
@@ -115,38 +118,12 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 	}
 	
-	public func initialize(parameters: [String: Any]) {
-		guard !isPreview else { return }
-		bleDelegate = Delegate(server: self)
-#if os(tvOS) || os(watchOS)
-		peripheralManager = CBPeripheralManager(); peripheralManager.delegate = bleDelegate
-#else
-		peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil)
-#endif
-
-		guard let d = parameters[InitializeKeys.document_data.rawValue] as? [Data] else {
-			error = Self.makeError(code: .documents_not_provided); return
-		}
-		// load json sample data here
-		let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
-		docs = sampleData.compactMap { $0.deviceResponse }
-		devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
-		if docs.count == 0 { error = Self.makeError(code: .invalidInputDocument); return }
-		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
-			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
-		}
-		if let b = parameters[InitializeKeys.require_user_accept.rawValue] as? Bool {
-			requireUserAccept = b
-		}
-		status = .initialized
-	}
-	
 	/// Returns true if the peripheralManager state is poweredOn
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
-
+	
 	/// Returns true if the peripheralManager state is unauthorized
 	public var isBlePermissionDenied: Bool { peripheralManager.state == .unauthorized }
-
+	
 	// Create a new device engagement object and start the device engagement process.
 	///
 	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
@@ -156,11 +133,11 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
 		sessionEncryption = nil
-		#if os(iOS)
+#if os(iOS)
 		/// get qrCode image data corresponding to the device engagement
 		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
 		qrCodeImageData = qrCodeImage.pngData()
-		#endif
+#endif
 		guard docs.allSatisfy({ $0.documents != nil }) else { error = Self.makeError(code: .invalidInputDocument); return }
 		// Check that the peripheral manager has been authorized to use Bluetooth.
 		guard peripheralManager.state != .unauthorized else { error = Self.makeError(code: .bleNotAuthorized); return }
@@ -212,23 +189,25 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		delegate?.didChangeStatus(newValue)
 		if newValue == .requestReceived {
 			peripheralManager.stopAdvertising()
-			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, devicePrivateKey: devicePrivateKey, handler: userSelected)
+			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, devicePrivateKey: devicePrivateKey, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover, handler: userSelected)
 			if deviceRequest == nil { error = Self.makeError(code: .requestDecodeError) }
 			if requireUserAccept == false /*|| _isDebugAssertConfiguration() */ { userSelected(true, nil) }
 		}
 		else if newValue == .initialized {
+			bleDelegate = Delegate(server: self)
+			peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil)
 			subscribeCount = 0
-			peripheralManager.removeAllServices()
 		} else if newValue == .disconnected && status != .disconnected {
 			stop()
 		}
 	}
 	
 	var isPreview: Bool {
-			return ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+		return ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 	}
 	
 	public func userSelected(_ b: Bool, _ items: RequestItems?) {
+		status = .userSelected
 		if !b { error = Self.makeError(code: .userRejected) }
 		if let items {
 			do {
@@ -238,12 +217,6 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		guard let bytes = getSessionDataToSend(deviceRequest!, eReaderKey: sessionEncryption!.sessionKeys.publicKey) else { error = Self.makeError(code: .noDocumentToReturn); return }
 		prepareDataToSend(bytes)
 		DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { self.sendDataWithUpdates() }
-	}
-	
-	static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
-		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
-		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
-		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage])
 	}
 	
 	func handleErrorSet(_ newValue: Error?) {
