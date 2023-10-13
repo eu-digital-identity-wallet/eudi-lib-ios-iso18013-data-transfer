@@ -177,7 +177,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	
 	public func stop() {
 		guard !isPreview else { return }
-		if peripheralManager.isAdvertising {	peripheralManager.stopAdvertising() }
+		if let peripheralManager, peripheralManager.isAdvertising { peripheralManager.stopAdvertising() }
 		qrCodeImageData = nil
 		advertising = false
 		subscribeCount = 0
