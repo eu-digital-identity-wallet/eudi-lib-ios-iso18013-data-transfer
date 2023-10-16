@@ -36,6 +36,7 @@ public enum TransferStatus: String {
 public enum ErrorCode: Int, CustomStringConvertible {
 	case documents_not_provided
 	case invalidInputDocument
+	case invalidUrl
 	case device_private_key_not_provided
 	case noDocumentToReturn
 	case userRejected
@@ -48,6 +49,7 @@ public enum ErrorCode: Int, CustomStringConvertible {
 		switch self {
 		case .documents_not_provided: return "DOCUMENTS_NOT_PROVIDED"
 		case .invalidInputDocument: return "INVALID_INPUT_DOCUMENT"
+		case .invalidUrl: return "INVALID_URL"
 		case .device_private_key_not_provided: return "DEVICE_PRIVATE_KEY_NOT_PROVIDED"
 		case .noDocumentToReturn: return "NO_DOCUMENT_TO_RETURN"
 		case .requestDecodeError: return "REQUEST_DECODE_ERROR"

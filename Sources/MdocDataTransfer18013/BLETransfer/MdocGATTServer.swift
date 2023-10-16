@@ -128,7 +128,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	///
 	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
 	public func performDeviceEngagement() {
-		guard !isPreview else { return }
+		guard !isPreview && !isInErrorState else { return }
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
@@ -155,7 +155,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	func start() {
-		guard !isPreview else { return }
+		guard !isPreview && !isInErrorState else { return }
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil
@@ -177,14 +177,15 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	
 	public func stop() {
 		guard !isPreview else { return }
-		if peripheralManager.isAdvertising {	peripheralManager.stopAdvertising() }
+		if let peripheralManager, peripheralManager.isAdvertising { peripheralManager.stopAdvertising() }
 		qrCodeImageData = nil
 		advertising = false
 		subscribeCount = 0
+		if status == .error { status = .initializing } 
 	}
 	
 	func handleStatusChange(_ newValue: TransferStatus) {
-		guard !isPreview else { return }
+		guard !isPreview && !isInErrorState else { return }
 		logger.log(level: .info, "Transfer status will change to \(newValue)")
 		delegate?.didChangeStatus(newValue)
 		if newValue == .requestReceived {
@@ -203,8 +204,10 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	var isPreview: Bool {
-		return ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+		ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 	}
+	
+	var isInErrorState: Bool { status == .error }
 	
 	public func userSelected(_ b: Bool, _ items: RequestItems?) {
 		status = .userSelected
@@ -243,6 +246,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	func sendDataWithUpdates() {
+		guard !isPreview && !isInErrorState else { return }
 		guard sendBuffer.count > 0 else {
 			status = .responseSent; logger.info("Finished sending BLE data")
 			return

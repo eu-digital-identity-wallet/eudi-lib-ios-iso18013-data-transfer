@@ -110,14 +110,18 @@ extension MdocTransferManager {
 		return nil
 	}
 	
-	@discardableResult public func getDeviceResponseToSend(_ deviceRequest: DeviceRequest, selectedItems: RequestItems?, eReaderKey: CoseKey, devicePrivateKey: CoseKeyPrivate) throws -> DeviceResponse? {
+	@discardableResult public func getDeviceResponseToSend(_ deviceRequest: DeviceRequest?, selectedItems: RequestItems?, eReaderKey: CoseKey?, devicePrivateKey: CoseKeyPrivate) throws -> DeviceResponse? {
 		let documents = docs.flatMap { $0.documents! }
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
-		for docReq in deviceRequest.docRequests {
-			guard let doc = documents.findDoc(name: docReq.itemsRequest.docType) else {
-				docErrors.append([docReq.itemsRequest.docType: UInt64(0)])
-				errorReqItemsDocDict[docReq.itemsRequest.docType] = [:]
+		guard deviceRequest != nil || selectedItems != nil else { fatalError("Invalid call") }
+		let haveDeviceRequest = deviceRequest != nil
+		let reqDocTypes = haveDeviceRequest ? deviceRequest!.docRequests.map(\.itemsRequest.docType) : Array(selectedItems!.keys)
+		for reqDocType in reqDocTypes {
+			let docReq = deviceRequest?.docRequests.findDoc(name: reqDocType)
+			guard let doc = documents.findDoc(name: reqDocType) else {
+				docErrors.append([reqDocType: UInt64(0)])
+				errorReqItemsDocDict[reqDocType] = [:]
 				continue
 			}
 			guard let issuerNs = doc.issuerSigned.issuerNameSpaces else { logger.error("Null issuer namespaces"); return nil }
@@ -125,38 +129,43 @@ extension MdocTransferManager {
 			var nsErrorsToAdd = [NameSpace : ErrorItems]()
 			var validReqItemsNsDict = [NameSpace: [String]]()
 			// for each request namespace
-			for (nsReq, itemsReq) in docReq.itemsRequest.requestNameSpaces.nameSpaces {
-				guard let items = issuerNs[nsReq] else {
-					nsErrorsToAdd[nsReq] = itemsReq.dataElements.mapValues { _ in 0 }
+			let reqNamespaces = haveDeviceRequest ? Array(docReq!.itemsRequest.requestNameSpaces.nameSpaces.keys) : Array(selectedItems![reqDocType]!.keys)
+			for reqNamespace in reqNamespaces {
+				let reqElementIdentifiers = haveDeviceRequest ? docReq!.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]!.elementIdentifiers : Array(selectedItems![reqDocType]![reqNamespace]!)
+				guard let items = issuerNs[reqNamespace] else {
+					nsErrorsToAdd[reqNamespace] = Dictionary(grouping: reqElementIdentifiers, by: {$0}).mapValues { _ in 0 }
 					continue
 				}
-				let itemsReqSet = Set(itemsReq.elementIdentifiers)
+				let itemsReqSet = Set(reqElementIdentifiers)
 				let itemsSet = Set(items.map(\.elementIdentifier))
 				var itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
 				if let selectedItems {
-					let selectedNsItems = selectedItems[docReq.itemsRequest.docType]?[nsReq] ?? []
+					let selectedNsItems = selectedItems[reqDocType]?[reqNamespace] ?? []
 					itemsToAdd = itemsToAdd.filter({ selectedNsItems.contains($0.elementIdentifier) })
 				}
 				if itemsToAdd.count > 0 {
-					nsItemsToAdd[nsReq] = itemsToAdd
-					validReqItemsNsDict[nsReq] = itemsToAdd.map(\.elementIdentifier)
+					nsItemsToAdd[reqNamespace] = itemsToAdd
+					validReqItemsNsDict[reqNamespace] = itemsToAdd.map(\.elementIdentifier)
 				}
 				let errorItemsSet = itemsReqSet.subtracting(itemsSet)
 				if errorItemsSet.count > 0 { 
-					nsErrorsToAdd[nsReq] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
+					nsErrorsToAdd[reqNamespace] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
 				}
 			} // end ns for
 			let issuerAuthToAdd = doc.issuerSigned.issuerAuth
 			let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
-			let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: devicePrivateKey)
-			let mdocAuth = MdocAuthentication(transcript: sessionEncryption!.transcript, authKeys: authKeys)
-			guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: docReq.itemsRequest.docType) else {logger.error("Cannot create device auth"); return nil }
-			let devSignedToAdd = DeviceSigned(deviceAuth: devAuth)
+			var devSignedToAdd: DeviceSigned? = nil
+			if let eReaderKey, let sessionEncryption {
+				let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: devicePrivateKey)
+				let mdocAuth = MdocAuthentication(transcript: sessionEncryption.transcript, authKeys: authKeys)
+				guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: reqDocType) else {logger.error("Cannot create device auth"); return nil }
+				devSignedToAdd = DeviceSigned(deviceAuth: devAuth)
+			}
 			let errors: Errors? = nsErrorsToAdd.count == 0 ? nil : Errors(errors: nsErrorsToAdd)
-			let docToAdd = Document(docType: docReq.itemsRequest.docType, issuerSigned: issToAdd, deviceSigned: devSignedToAdd, errors: errors)
+			let docToAdd = Document(docType: reqDocType, issuerSigned: issToAdd, deviceSigned: devSignedToAdd, errors: errors)
 			docFiltered.append(docToAdd)
-			validReqItemsDocDict[docReq.itemsRequest.docType] = validReqItemsNsDict
-			errorReqItemsDocDict[docReq.itemsRequest.docType] = nsErrorsToAdd.mapValues { Array($0.keys) }
+			validReqItemsDocDict[reqDocType] = validReqItemsNsDict
+			errorReqItemsDocDict[reqDocType] = nsErrorsToAdd.mapValues { Array($0.keys) }
 		} // end doc for
 		let documentErrors: [DocumentError]? = docErrors.count == 0 ? nil : docErrors.map(DocumentError.init(docErrors:))
 		deviceResponseToSend = DeviceResponse(version: docs.first!.version, documents: docFiltered, documentErrors: documentErrors, status: 0)

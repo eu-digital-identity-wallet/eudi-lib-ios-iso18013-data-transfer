@@ -32,8 +32,11 @@ public class DefaultTransferDelegate: ObservableObject, MdocOfflineDelegate {
 		self.handleSelected = handleSelected
 		// show the items as checkboxes
 		guard let validRequestItems = request[UserRequestKeys.valid_items_requested.rawValue] as? RequestItems else { return }
-		guard let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems else { return }
-		selectedRequestItems = validRequestItems.toDocElementViewModels(valid: true).merging(with: errorRequestItems.toDocElementViewModels(valid: false))
+		var tmp = validRequestItems.toDocElementViewModels(valid: true)
+		if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
+			tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(valid: false))
+		}
+		selectedRequestItems = tmp
 		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
 			let bAuthenticated = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool ?? false
 			readerCertIsserMessage = "Reader Certificate Issuer:\n\(readerAuthority)\n\(bAuthenticated ? "Authenticated" : "NOT authenticated")\n\(request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String ?? "")"

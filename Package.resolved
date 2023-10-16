@@ -15,7 +15,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "ac46a0c71c5154353d1cf911e2eb62891b4fb896"
+        "revision" : "030aa420a21bc659b36bd73b6d852941422d1b20"
       }
     },
     {
@@ -24,7 +24,16 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "24a0589aacb21603110a6f59004417772e448da9"
+        "revision" : "74adc77280c605af8a3d849fd949e43b5e86dc92"
+      }
+    },
+    {
+      "identity" : "swift-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-crypto.git",
+      "state" : {
+        "revision" : "60f13f60c4d093691934dc6cfdf5f508ada1f894",
+        "version" : "2.6.0"
       }
     },
     {
