@@ -70,6 +70,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 		
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
+			logger.info("CBPeripheralManager didUpdateState:")
 			logger.info(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")
 			if peripheral.state == .poweredOn, server.qrCodeImageData != nil { server.start() }
 		}
@@ -128,7 +129,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	///
 	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
 	public func performDeviceEngagement() {
-		guard !isPreview && !isInErrorState else { return }
+		guard !isPreview && !isInErrorState else { logger.info("Current status is \(status)"); return }
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
@@ -137,6 +138,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		/// get qrCode image data corresponding to the device engagement
 		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
 		qrCodeImageData = qrCodeImage.pngData()
+		logger.info("Created qrCode with size \(qrCodeImageData!.count)")
 #endif
 		guard docs.allSatisfy({ $0.documents != nil }) else { error = Self.makeError(code: .invalidInputDocument); return }
 		// Check that the peripheral manager has been authorized to use Bluetooth.
@@ -155,7 +157,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 	}
 	
 	func start() {
-		guard !isPreview && !isInErrorState else { return }
+		guard !isPreview && !isInErrorState else { logger.info("Current status is \(status)"); return }
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil
@@ -172,6 +174,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		} else {
 			// once bt is powered on, advertise
 			if peripheralManager.state == .resetting { DispatchQueue.main.asyncAfter(deadline: .now()+1) { self.start()} }
+			else { logger.info("Peripheral manager powered off") }
 		}
 	}
 	
@@ -196,6 +199,7 @@ public class MdocGattServer: ObservableObject, MdocTransferManager {
 		}
 		else if newValue == .initialized {
 			bleDelegate = Delegate(server: self)
+			logger.info("Initializing BLE peripheral manager")
 			peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil)
 			subscribeCount = 0
 		} else if newValue == .disconnected && status != .disconnected {
