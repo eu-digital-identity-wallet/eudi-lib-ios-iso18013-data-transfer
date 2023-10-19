@@ -136,7 +136,7 @@ extension MdocTransferManager {
 					nsErrorsToAdd[reqNamespace] = Dictionary(grouping: reqElementIdentifiers, by: {$0}).mapValues { _ in 0 }
 					continue
 				}
-				let itemsReqSet = Set(reqElementIdentifiers)
+				let itemsReqSet = Set(reqElementIdentifiers).subtracting(IsoMdlModel.self.moreThan2AgeOverElementIdentifiers(reqDocType, reqNamespace, SimpleAgeAttest(namespaces: issuerNs.nameSpaces), reqElementIdentifiers))
 				let itemsSet = Set(items.map(\.elementIdentifier))
 				var itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
 				if let selectedItems {
@@ -186,6 +186,8 @@ extension MdocTransferManager {
 		} catch { self.error = error}
 		return nil
 	}
+	
+	
 	
 	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
 		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
