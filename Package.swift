@@ -13,7 +13,6 @@ let package = Package(
             targets: ["MdocDataTransfer18013"]),
     ],
     dependencies: [
-		//.package(path: "../MdocSecurity18013"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", branch: "develop"),
 		.package(url: "https://github.com/apple/swift-log.git", branch: "main"),
 		.package(url: "https://github.com/valpackett/SwiftCBOR.git", branch: "master"),

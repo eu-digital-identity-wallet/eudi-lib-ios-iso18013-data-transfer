@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -59,4 +59,21 @@ public enum ErrorCode: Int, CustomStringConvertible {
 		default: return "GENERIC_ERROR"
 		}
 	}
+}
+
+/// String keys for the initialization dictionary
+public enum InitializeKeys: String {
+	case document_json_data
+	case document_signup_response_data
+	case device_private_key
+	case trusted_certificates
+}
+
+/// String keys for the user request dictionary
+public enum UserRequestKeys: String {
+	case valid_items_requested
+	case error_items_requested
+	case reader_certificate_issuer
+	case reader_auth_validated
+	case reader_certificate_validation_message
 }

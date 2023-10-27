@@ -12,7 +12,7 @@
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer&metric=reliability_rating&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer&metric=vulnerabilities&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer)
 
-Implementation of mDoc Data retrieval using Bluetooth® low energy (BLE) according to [ISO/IEC 18013-5](https://www.iso.org/standard/69084.html) standard (0.9.0). At the present time, device engagement is available only using QR code.
+Implementation of mDoc Data retrieval using Bluetooth® low energy (BLE) according to [ISO/IEC 18013-5](https://www.iso.org/standard/69084.html) standard. At the present time, device engagement is available only using QR code.
 
 ## Overview
 The ``MdocGattServer`` provides the BLE transfer implementation. To begin, create an instance of the class and keep the referenence in the view.
