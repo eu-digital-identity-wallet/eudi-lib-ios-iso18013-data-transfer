@@ -12,9 +12,6 @@
   - `server2ClientCharacteristic`
   - `deviceEngagement`
   - `deviceRequest`
-  - `deviceResponseToSend`
-  - `validRequestItems`
-  - `errorRequestItems`
   - `sessionEncryption`
   - `docs`
   - `iaca`
@@ -25,7 +22,6 @@
   - `advertising`
   - `error`
   - `status`
-  - `requireUserAccept`
   - `readBuffer`
   - `sendBuffer`
   - `numBlocks`
@@ -35,7 +31,7 @@
   - `isPreview`
   - `isInErrorState`
 - [Methods](#methods)
-  - `init(status:)`
+  - `init(parameters:)`
   - `performDeviceEngagement()`
   - `buildServices(uuid:)`
   - `start()`
@@ -45,9 +41,12 @@
   - `handleErrorSet(_:)`
   - `prepareDataToSend(_:)`
   - `sendDataWithUpdates()`
+  - `getSessionDataToSend(docToSend:)`
+  - `decodeRequestAndInformUser(requestData:devicePrivateKey:readerKeyRawData:handOver:handler:)`
+  - `makeError(code:str:)`
 
 ```swift
-public class MdocGattServer: ObservableObject, MdocTransferManager
+public class MdocGattServer: ObservableObject
 ```
 
 BLE Gatt server implementation of mdoc transfer manager
@@ -95,24 +94,6 @@ public var deviceEngagement: DeviceEngagement?
 public var deviceRequest: DeviceRequest?
 ```
 
-### `deviceResponseToSend`
-
-```swift
-public var deviceResponseToSend: DeviceResponse?
-```
-
-### `validRequestItems`
-
-```swift
-public var validRequestItems: RequestItems?
-```
-
-### `errorRequestItems`
-
-```swift
-public var errorRequestItems: RequestItems?
-```
-
 ### `sessionEncryption`
 
 ```swift
@@ -146,7 +127,7 @@ public var readerName: String?
 ### `qrCodeImageData`
 
 ```swift
-@Published public var qrCodeImageData: Data?
+public var qrCodeImageData: Data?
 ```
 
 ### `delegate`
@@ -158,25 +139,19 @@ public weak var delegate: (any MdocOfflineDelegate)?
 ### `advertising`
 
 ```swift
-@Published public var advertising: Bool = false
+public var advertising: Bool = false
 ```
 
 ### `error`
 
 ```swift
-@Published public var error: Error? = nil
+public var error: Error? = nil
 ```
 
 ### `status`
 
 ```swift
-@Published public var status: TransferStatus = .initializing
-```
-
-### `requireUserAccept`
-
-```swift
-public var requireUserAccept = false
+public var status: TransferStatus = .initializing
 ```
 
 ### `readBuffer`
@@ -232,10 +207,10 @@ var isInErrorState: Bool
 ```
 
 ## Methods
-### `init(status:)`
+### `init(parameters:)`
 
 ```swift
-public init(status: TransferStatus = .initializing)
+public init(parameters: [String: Any]) throws
 ```
 
 ### `performDeviceEngagement()`
@@ -292,4 +267,39 @@ func prepareDataToSend(_ msg: Data)
 
 ```swift
 func sendDataWithUpdates()
+```
+
+### `getSessionDataToSend(docToSend:)`
+
+```swift
+public func getSessionDataToSend(docToSend: DeviceResponse) -> Data?
+```
+
+### `decodeRequestAndInformUser(requestData:devicePrivateKey:readerKeyRawData:handOver:handler:)`
+
+```swift
+public func decodeRequestAndInformUser(requestData: Data, devicePrivateKey: CoseKeyPrivate, readerKeyRawData: [UInt8]?, handOver: CBOR, handler: @escaping (Bool, RequestItems?) -> Void) -> DeviceRequest?
+```
+
+Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
+- Parameters:
+  - requestData: Request data passed to the mdoc holder
+  - handler: Handler to call with the accept/reject flag
+  - devicePrivateKey: Device private key
+  - readerKeyRawData: reader key cbor data (if reader engagement is used)
+- Returns: A ``DeviceRequest`` object
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| requestData | Request data passed to the mdoc holder |
+| handler | Handler to call with the accept/reject flag |
+| devicePrivateKey | Device private key |
+| readerKeyRawData | reader key cbor data (if reader engagement is used) |
+
+### `makeError(code:str:)`
+
+```swift
+public static func makeError(code: ErrorCode, str: String? = nil) -> NSError
 ```
