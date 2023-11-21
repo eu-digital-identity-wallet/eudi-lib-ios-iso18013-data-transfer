@@ -15,7 +15,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "2af6a5ade98c4b4458793f811317c6ecac93f4bf"
+        "revision" : "7d28b97313c8a247f1e862875c985bc8db9b5df1"
       }
     },
     {
@@ -24,7 +24,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "c9295736c3e4899b3f3440b2d4c3ed4654d2f077"
+        "revision" : "919aae995e0cc8294a830cb6fb70032f6e4d4876"
       }
     },
     {
@@ -33,7 +33,7 @@
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
         "branch" : "main",
-        "revision" : "cb28750240a9389e0023ee3e3cb6c83ce0960f5c"
+        "revision" : "f447991bd27b2e16bf93cc80219da8a7331a55dc"
       }
     },
     {
