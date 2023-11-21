@@ -13,18 +13,14 @@ let package = Package(
             targets: ["MdocDataTransfer18013"]),
     ],
     dependencies: [
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", branch: "develop"),
-		.package(url: "https://github.com/apple/swift-log.git", branch: "main"),
-		.package(url: "https://github.com/valpackett/SwiftCBOR.git", branch: "master"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", .upToNextMinor(from: "0.1.0")),
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "MdocDataTransfer18013", dependencies: [
-				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security"),
-				.product(name: "Logging", package: "swift-log"),
-				"SwiftCBOR"]),
+				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security")]),
         .testTarget(
             name: "MdocDataTransfer18013Tests",
             dependencies: ["MdocDataTransfer18013"]),
