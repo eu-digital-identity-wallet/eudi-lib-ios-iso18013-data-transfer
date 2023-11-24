@@ -39,9 +39,12 @@ public class MdocHelpers {
 			let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
 			docs = sampleData.compactMap { $0.deviceResponse }
 			devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
-		} else if let drs = parameters[InitializeKeys.document_signup_response_data.rawValue] as? [DeviceResponse], let dpk = parameters[InitializeKeys.device_private_key.rawValue] as? CoseKeyPrivate {
+		} else if let drs = parameters[InitializeKeys.document_signup_response_obj.rawValue] as? [DeviceResponse], let dpk = parameters[InitializeKeys.device_private_key_obj.rawValue] as? CoseKeyPrivate {
 			docs = drs
 			devicePrivateKey = dpk
+		} else if let drsData = parameters[InitializeKeys.document_signup_response_data.rawValue] as? [Data], let dpk = parameters[InitializeKeys.device_private_key_data.rawValue] as? Data {
+			docs = drsData.compactMap({ DeviceResponse(data: [UInt8]($0))})
+			devicePrivateKey = CoseKeyPrivate(privateKeyx963Data: dpk, crv: .p256)
 		}
 		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
 			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
