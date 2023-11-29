@@ -95,23 +95,28 @@ public class MdocHelpers {
 					nsErrorsToAdd[reqNamespace] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
 				}
 			} // end ns for
-			let issuerAuthToAdd = doc.issuerSigned.issuerAuth
-			let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
-			var devSignedToAdd: DeviceSigned? = nil
-			if let eReaderKey, let sessionEncryption, let devicePrivateKey {
-				let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: devicePrivateKey)
-				let mdocAuth = MdocAuthentication(transcript: sessionEncryption.transcript, authKeys: authKeys)
-				guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: reqDocType) else {logger.error("Cannot create device auth"); return nil }
-				devSignedToAdd = DeviceSigned(deviceAuth: devAuth)
-			}
 			let errors: Errors? = nsErrorsToAdd.count == 0 ? nil : Errors(errors: nsErrorsToAdd)
-			let docToAdd = Document(docType: reqDocType, issuerSigned: issToAdd, deviceSigned: devSignedToAdd, errors: errors)
-			docFiltered.append(docToAdd)
-			validReqItemsDocDict[reqDocType] = validReqItemsNsDict
+			if nsItemsToAdd.count > 0 {
+				let issuerAuthToAdd = doc.issuerSigned.issuerAuth
+				let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
+				var devSignedToAdd: DeviceSigned? = nil
+				if let eReaderKey, let sessionEncryption, let devicePrivateKey {
+					let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: devicePrivateKey)
+					let mdocAuth = MdocAuthentication(transcript: sessionEncryption.transcript, authKeys: authKeys)
+					guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: reqDocType) else {logger.error("Cannot create device auth"); return nil }
+					devSignedToAdd = DeviceSigned(deviceAuth: devAuth)
+				}
+				let docToAdd = Document(docType: reqDocType, issuerSigned: issToAdd, deviceSigned: devSignedToAdd, errors: errors)
+				docFiltered.append(docToAdd)
+				validReqItemsDocDict[reqDocType] = validReqItemsNsDict
+			} else {
+				docErrors.append([reqDocType: UInt64(0)])
+			}
 			errorReqItemsDocDict[reqDocType] = nsErrorsToAdd.mapValues { Array($0.keys) }
 		} // end doc for
 		let documentErrors: [DocumentError]? = docErrors.count == 0 ? nil : docErrors.map(DocumentError.init(docErrors:))
-		let deviceResponseToSend = DeviceResponse(version: deviceResponses.first!.version, documents: docFiltered, documentErrors: documentErrors, status: 0)
+		let documentsToAdd = docFiltered.count == 0 ? nil : docFiltered
+		let deviceResponseToSend = DeviceResponse(version: deviceResponses.first!.version, documents: documentsToAdd, documentErrors: documentErrors, status: 0)
 		return (deviceResponseToSend, validReqItemsDocDict, errorReqItemsDocDict)
 	}
 	
