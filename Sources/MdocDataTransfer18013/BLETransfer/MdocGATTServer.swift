@@ -218,16 +218,23 @@ public class MdocGattServer: ObservableObject {
 	
 	public func userSelected(_ b: Bool, _ items: RequestItems?) {
 		status = .userSelected
-		if !b { error = Self.makeError(code: .userRejected) }
+		var bytesToSend = getSessionDataToSend(docToSend: DeviceResponse(status: 0))!
+		var errorToSend: Error?
+		defer {
+			logger.info("Prepare \(bytesToSend.count) bytes to send")
+			prepareDataToSend(bytesToSend)
+			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { self.sendDataWithUpdates(); self.error = errorToSend }
+		}
+		if !b { errorToSend = Self.makeError(code: .userRejected) }
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, deviceResponses: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { error = Self.getErrorNoDocuments(docTypeReq); return }
-				guard let dts = drToSend.documents, !dts.isEmpty else { error = Self.getErrorNoDocuments(docTypeReq); return}
-				guard let bytes = getSessionDataToSend(docToSend: drToSend) else { error = Self.getErrorNoDocuments(docTypeReq); return }
-				prepareDataToSend(bytes)
-				DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { self.sendDataWithUpdates() }
-			} catch { self.error = error }
+				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, deviceResponses: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { errorToSend = Self.getErrorNoDocuments(docTypeReq); return  }
+				guard let dts = drToSend.documents, !dts.isEmpty else { errorToSend = Self.getErrorNoDocuments(docTypeReq); return  }
+				guard let bytes = getSessionDataToSend(docToSend: drToSend) else { errorToSend = Self.getErrorNoDocuments(docTypeReq); return }
+				bytesToSend = bytes
+			}
+			catch { errorToSend = error }
 		}
 	}
 	
@@ -255,7 +262,7 @@ public class MdocGattServer: ObservableObject {
 	}
 	
 	func sendDataWithUpdates() {
-		guard !isPreview && !isInErrorState else { return }
+		guard !isPreview else { return }
 		guard sendBuffer.count > 0 else {
 			status = .responseSent; logger.info("Finished sending BLE data")
 			stop()
@@ -272,7 +279,7 @@ public class MdocGattServer: ObservableObject {
 			let cborToSend = docToSend.toCBOR(options: CBOROptions())
 			let clearBytesToSend = cborToSend.encode()
 			guard let cipherData = try sessionEncryption.encrypt(clearBytesToSend) else { return nil }
-			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 0 : 20)
+			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 11 : 20)
 			return Data(sd.encode(options: CBOROptions()))
 		} catch { self.error = error}
 		return nil
@@ -300,7 +307,7 @@ public class MdocGattServer: ObservableObject {
 			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return nil }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return nil }
 			guard let (drTest, validRequestItems, errorRequestItems) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { logger.error("Valid request items nil"); return nil }
-			if drTest.documents == nil { self.error = Self.getErrorNoDocuments(deviceRequest.docRequests.first?.itemsRequest.docType ?? ""); return nil }
+			let bInvalidReq = (drTest.documents == nil)
 			var params: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: validRequestItems, UserRequestKeys.error_items_requested.rawValue: errorRequestItems]
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
@@ -311,7 +318,13 @@ public class MdocGattServer: ObservableObject {
 				}
 			}
 			self.deviceRequest = deviceRequest
-			delegate?.didReceiveRequest(params, handleSelected: handler)
+			if bInvalidReq {
+				handler(true, nil)
+				self.error = Self.getErrorNoDocuments(deviceRequest.docRequests.first?.itemsRequest.docType ?? "")
+			}
+			else {
+				delegate?.didReceiveRequest(params, handleSelected: handler)
+			}
 			return deviceRequest
 		} catch { self.error = error}
 		return nil
