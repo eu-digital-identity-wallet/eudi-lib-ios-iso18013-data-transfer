@@ -49,13 +49,14 @@ public class MdocGattServer: ObservableObject {
 	var sendBuffer = [Data]()
 	var numBlocks: Int = 0
 	var subscribeCount: Int = 0
+	var initSuccess:Bool = false
 	
 	public init(parameters: [String: Any]) throws {
 		guard let (docs, devicePrivateKey, iaca) = MdocHelpers.initializeData(parameters: parameters) else {
 			throw Self.makeError(code: .documents_not_provided)
 		}
 		self.docs = docs; self.devicePrivateKey = devicePrivateKey; self.iaca = iaca
-		status = .initialized; handleStatusChange(status)
+		status = .initialized; initSuccess = true; handleStatusChange(status)
 	}
 	
 	@objc(CBPeripheralManagerDelegate)
@@ -129,11 +130,11 @@ public class MdocGattServer: ObservableObject {
 	// Create a new device engagement object and start the device engagement process.
 	///
 	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
-	public func performDeviceEngagement() {
+	public func performDeviceEngagement(rfus: [String]? = nil) {
 		guard !isPreview && !isInErrorState else { logger.info("Current status is \(status)"); return }
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
-		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256)
+		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256, rfus: rfus)
 		sessionEncryption = nil
 #if os(iOS)
 		/// get qrCode image data corresponding to the device engagement
@@ -185,7 +186,7 @@ public class MdocGattServer: ObservableObject {
 		qrCodeImageData = nil
 		advertising = false
 		subscribeCount = 0
-		if status == .error { status = .initializing } 
+		if status == .error && initSuccess { status = .initializing }
 	}
 	
 	func handleStatusChange(_ newValue: TransferStatus) {
@@ -195,7 +196,7 @@ public class MdocGattServer: ObservableObject {
 		if newValue == .requestReceived {
 			peripheralManager.stopAdvertising()
 			deviceRequest = decodeRequestAndInformUser(requestData: readBuffer, devicePrivateKey: devicePrivateKey, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover, handler: userSelected)
-			if deviceRequest == nil { error = Self.makeError(code: .requestDecodeError) }
+			if deviceRequest == nil && error == nil { error = Self.makeError(code: .requestDecodeError) }
 		}
 		else if newValue == .initialized {
 			bleDelegate = Delegate(server: self)
@@ -212,14 +213,18 @@ public class MdocGattServer: ObservableObject {
 	}
 	
 	var isInErrorState: Bool { status == .error }
+	static var errorNoDocumentsDescriptionKey: String { "doctype_not_found" }
+	static func getErrorNoDocuments(_ docType: String) -> Error { NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: ["key": Self.errorNoDocumentsDescriptionKey, "%s": docType]) }
 	
 	public func userSelected(_ b: Bool, _ items: RequestItems?) {
 		status = .userSelected
 		if !b { error = Self.makeError(code: .userRejected) }
 		if let items {
 			do {
-				guard let (docToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, deviceResponses: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { error = Self.makeError(code: .noDocumentToReturn); return }
-				guard let bytes = getSessionDataToSend(docToSend: docToSend) else { error = Self.makeError(code: .noDocumentToReturn); return }
+				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
+				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, deviceResponses: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { error = Self.getErrorNoDocuments(docTypeReq); return }
+				guard let dts = drToSend.documents, !dts.isEmpty else { error = Self.getErrorNoDocuments(docTypeReq); return}
+				guard let bytes = getSessionDataToSend(docToSend: drToSend) else { error = Self.getErrorNoDocuments(docTypeReq); return }
 				prepareDataToSend(bytes)
 				DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { self.sendDataWithUpdates() }
 			} catch { self.error = error }
@@ -294,7 +299,8 @@ public class MdocGattServer: ObservableObject {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
 			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return nil }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return nil }
-			guard let (_, validRequestItems, errorRequestItems) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { logger.error("Valid request items nil"); return nil }
+			guard let (drTest, validRequestItems, errorRequestItems) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { logger.error("Valid request items nil"); return nil }
+			if drTest.documents == nil { self.error = Self.getErrorNoDocuments(deviceRequest.docRequests.first?.itemsRequest.docType ?? ""); return nil }
 			var params: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: validRequestItems, UserRequestKeys.error_items_requested.rawValue: errorRequestItems]
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
@@ -314,7 +320,7 @@ public class MdocGattServer: ObservableObject {
 	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
 		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
 		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
-		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage])
+		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage, "key": code.description])
 	}
 }
 
