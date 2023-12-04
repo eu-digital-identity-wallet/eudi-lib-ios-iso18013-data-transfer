@@ -236,6 +236,8 @@ public class MdocHelpers {
 		return base
 	}
 	
+	#endif
+
 	/// Get the common name (CN) from the certificate distringuished name (DN)
 	public static func getCN(from dn: String) -> String  {
 			let regex = try! NSRegularExpression(pattern: "CN=([^,]+)")
@@ -246,6 +248,4 @@ public class MdocHelpers {
 			}
 			return dn
 		}
-	
-	#endif
 }
