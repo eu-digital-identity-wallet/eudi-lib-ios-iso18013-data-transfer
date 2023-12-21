@@ -55,8 +55,12 @@ public class MdocGattServer: ObservableObject {
 		guard let (docs, devicePrivateKey, iaca) = MdocHelpers.initializeData(parameters: parameters) else {
 			throw Self.makeError(code: .documents_not_provided)
 		}
-		self.docs = docs; self.devicePrivateKey = devicePrivateKey; self.iaca = iaca
-		status = .initialized; initSuccess = true; handleStatusChange(status)
+		self.docs = docs
+		self.devicePrivateKey = devicePrivateKey
+		self.iaca = iaca
+		status = .initialized
+		initSuccess = true
+		handleStatusChange(status)
 	}
 	
 	@objc(CBPeripheralManagerDelegate)
@@ -87,7 +91,7 @@ public class MdocGattServer: ObservableObject {
 				else if h == BleTransferMode.END_REQUEST.first! {
 					guard server.status == .responseSent else {
 						logger.error("State END command rejected. Not in responseSent state")
-						peripheral.respond(to: requests[0], withResult: .unlikelyError);
+						peripheral.respond(to: requests[0], withResult: .unlikelyError)
 						return
 					}
 					logger.info("End received to state characteristic") // --> end
@@ -131,20 +135,35 @@ public class MdocGattServer: ObservableObject {
 	///
 	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
 	public func performDeviceEngagement(rfus: [String]? = nil) {
-		guard !isPreview && !isInErrorState else { logger.info("Current status is \(status)"); return }
+		guard !isPreview && !isInErrorState else { 
+			logger.info("Current status is \(status)")
+			return
+		}
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
-		guard status == .initialized || status == .disconnected || status == .responseSent else { error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
+		guard status == .initialized || status == .disconnected || status == .responseSent else {
+			 error = Self.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!")
+			 return
+		}
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256, rfus: rfus)
 		sessionEncryption = nil
 #if os(iOS)
 		/// get qrCode image data corresponding to the device engagement
-		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = Self.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
+		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else {
+			error = Self.makeError(code: .unexpected_error, str: "Null Device engagement")
+			return
+		}
 		qrCodeImageData = qrCodeImage.pngData()
 		logger.info("Created qrCode with size \(qrCodeImageData!.count)")
 #endif
-		guard docs.allSatisfy({ $0.documents != nil }) else { error = Self.makeError(code: .invalidInputDocument); return }
+		guard docs.allSatisfy({ $0.documents != nil }) else {
+			error = Self.makeError(code: .invalidInputDocument)
+			return
+		}
 		// Check that the peripheral manager has been authorized to use Bluetooth.
-		guard peripheralManager.state != .unauthorized else { error = Self.makeError(code: .bleNotAuthorized); return }
+		guard peripheralManager.state != .unauthorized else { 
+			error = Self.makeError(code: .bleNotAuthorized)
+			return
+		}
 		start()
 	}
 	
@@ -159,12 +178,18 @@ public class MdocGattServer: ObservableObject {
 	}
 	
 	func start() {
-		guard !isPreview && !isInErrorState else { logger.info("Current status is \(status)"); return }
+		guard !isPreview && !isInErrorState else { 
+			logger.info("Current status is \(status)")
+			return
+		}
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil
 			// get the BLE UUID from the device engagement and truncate it to the first 4 characters (short UUID)
-			guard var uuid = deviceEngagement!.ble_uuid else { logger.error("BLE initialization error"); return }
+			guard var uuid = deviceEngagement!.ble_uuid else {
+				logger.error("BLE initialization error")
+				return
+			}
 			let index = uuid.index(uuid.startIndex, offsetBy: 4)
 			uuid = String(uuid[index...].prefix(4)).uppercased()
 			buildServices(uuid: uuid)
@@ -223,15 +248,27 @@ public class MdocGattServer: ObservableObject {
 		defer {
 			logger.info("Prepare \(bytesToSend.count) bytes to send")
 			prepareDataToSend(bytesToSend)
-			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { self.sendDataWithUpdates(); self.error = errorToSend }
+			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
+				self.sendDataWithUpdates()
+				self.error = errorToSend 
+			}
 		}
 		if !b { errorToSend = Self.makeError(code: .userRejected) }
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, deviceResponses: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { errorToSend = Self.getErrorNoDocuments(docTypeReq); return  }
-				guard let dts = drToSend.documents, !dts.isEmpty else { errorToSend = Self.getErrorNoDocuments(docTypeReq); return  }
-				guard let bytes = getSessionDataToSend(docToSend: drToSend) else { errorToSend = Self.getErrorNoDocuments(docTypeReq); return }
+				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, deviceResponses: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else {
+					errorToSend = Self.getErrorNoDocuments(docTypeReq)
+					return
+				 }
+				guard let dts = drToSend.documents, !dts.isEmpty else { 
+					errorToSend = Self.getErrorNoDocuments(docTypeReq)
+					return
+			    }
+				guard let bytes = getSessionDataToSend(docToSend: drToSend) else {
+					errorToSend = Self.getErrorNoDocuments(docTypeReq)
+					return
+				}
 				bytesToSend = bytes
 			}
 			catch { errorToSend = error }
@@ -264,24 +301,37 @@ public class MdocGattServer: ObservableObject {
 	func sendDataWithUpdates() {
 		guard !isPreview else { return }
 		guard sendBuffer.count > 0 else {
-			status = .responseSent; logger.info("Finished sending BLE data")
+			status = .responseSent
+			logger.info("Finished sending BLE data")
 			stop()
 			return
 		}
 		let b = peripheralManager.updateValue(sendBuffer.first!, for: server2ClientCharacteristic, onSubscribedCentrals: [remoteCentral])
-		if b, sendBuffer.count > 0 { sendBuffer.removeFirst(); sendDataWithUpdates() }
+		if b, sendBuffer.count > 0 { 
+			sendBuffer.removeFirst()
+			sendDataWithUpdates() 
+		}
 	}
 	
 	public func getSessionDataToSend(docToSend: DeviceResponse) -> Data? {
 		do {
-			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
-			if docToSend.documents == nil { logger.error("Could not create documents to send") }
+			guard var sessionEncryption else { 
+				logger.error("Session Encryption not initialized")
+				return nil
+			}
+			if docToSend.documents == nil { 
+				logger.error("Could not create documents to send") 
+			}
 			let cborToSend = docToSend.toCBOR(options: CBOROptions())
 			let clearBytesToSend = cborToSend.encode()
-			guard let cipherData = try sessionEncryption.encrypt(clearBytesToSend) else { return nil }
+			guard let cipherData = try sessionEncryption.encrypt(clearBytesToSend) else {
+				return nil 
+			}
 			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 11 : 20)
 			return Data(sd.encode(options: CBOROptions()))
-		} catch { self.error = error}
+		} catch { 
+			self.error = error
+		}
 		return nil
 	}
 	
@@ -295,18 +345,42 @@ public class MdocGattServer: ObservableObject {
 
 	public func decodeRequestAndInformUser(requestData: Data, devicePrivateKey: CoseKeyPrivate, readerKeyRawData: [UInt8]?, handOver: CBOR, handler: @escaping (Bool, RequestItems?) -> Void) -> DeviceRequest? {
 		do {
-			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return nil }
-			guard var se = SessionEstablishment(cbor: seCbor) else { logger.error("Request Data cannot be decoded to session establisment"); return nil }
+			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { 
+				logger.error("Request Data is not Cbor")
+				return nil 
+			}
+			guard var se = SessionEstablishment(cbor: seCbor) else {
+				logger.error("Request Data cannot be decoded to session establisment")
+				return nil 
+			}
 			if se.eReaderKeyRawData == nil, let readerKeyRawData { se.eReaderKeyRawData = readerKeyRawData }
-			guard se.eReaderKey != nil else { logger.error("Reader key not available"); return nil }
+			guard se.eReaderKey != nil else { 
+				logger.error("Reader key not available")
+				return nil 
+			}
 			let requestCipherData = se.data
-			guard let deviceEngagement else { logger.error("Device Engagement not initialized"); return nil }
+			guard let deviceEngagement else { 
+				logger.error("Device Engagement not initialized")
+				return nil 
+			}
 			// init session-encryption object from session establish message and device engagement, decrypt data
 			sessionEncryption = SessionEncryption(se: se, de: deviceEngagement, handOver: handOver)
-			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return nil }
-			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return nil }
-			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return nil }
-			guard let (drTest, validRequestItems, errorRequestItems) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { logger.error("Valid request items nil"); return nil }
+			guard var sessionEncryption else { 
+				logger.error("Session Encryption not initialized")
+				return nil 
+			}
+			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else {
+				logger.error("Request data cannot be decrypted")
+				return nil 
+			}
+			guard let deviceRequest = DeviceRequest(data: requestData) else {
+				logger.error("Decrypted data cannot be decoded")
+				return nil 
+			}
+			guard let (drTest, validRequestItems, errorRequestItems) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { 
+				logger.error("Valid request items nil")
+				return nil 
+			}
 			let bInvalidReq = (drTest.documents == nil)
 			var params: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: validRequestItems, UserRequestKeys.error_items_requested.rawValue: errorRequestItems]
 			if let docR = deviceRequest.docRequests.first {
