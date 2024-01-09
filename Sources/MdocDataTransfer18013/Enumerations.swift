@@ -44,6 +44,9 @@ public enum ErrorCode: Int, CustomStringConvertible {
 	case bleNotAuthorized
 	case bleNotSupported
 	case unexpected_error
+	case sessionEncryptionNotInitialized
+	case deviceEngagementMissing
+	case readerKeyMissing
 	
 	public var description: String {
 		switch self {
@@ -56,6 +59,9 @@ public enum ErrorCode: Int, CustomStringConvertible {
 		case .userRejected: return "USER_REJECTED"
 		case .bleNotAuthorized: return "BLE_NOT_AUTHORIZED"
 		case .bleNotSupported: return "BLE_NOT_SUPPORTED"
+		case .deviceEngagementMissing: return "DEVICE_ENGAGEMENT_MISSING"
+		case .readerKeyMissing: return "READER_KEY_MISSING"
+		case .sessionEncryptionNotInitialized: return "SESSION_ENCYPTION_NOT_INITIALIZED"
 		default: return "GENERIC_ERROR"
 		}
 	}
