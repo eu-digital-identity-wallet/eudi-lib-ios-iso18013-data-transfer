@@ -24,6 +24,9 @@ import MdocSecurity18013
 import UIKit
 #endif
 import AVFoundation
+import SwiftCBOR
+import ASN1Decoder
+import Logging
 
 public typealias RequestItems = [String: [String: [String]]]
 
@@ -52,6 +55,64 @@ public class MdocHelpers {
 		guard let docs else { return nil }
 		return (docs, devicePrivateKey, iaca)
 	}
+	
+	static var errorNoDocumentsDescriptionKey: String { "doctype_not_found" }
+	static func getErrorNoDocuments(_ docType: String) -> Error { NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: ["key": Self.errorNoDocumentsDescriptionKey, "%s": docType]) }
+	
+	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
+		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
+		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
+		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage, "key": code.description])
+	}
+	
+	public static func getSessionDataToSend(sessionEncryption: SessionEncryption?, status: TransferStatus, docToSend: DeviceResponse) -> Result<Data, Error> {
+		do {
+			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return .failure(Self.makeError(code: .sessionEncryptionNotInitialized)) }
+			if docToSend.documents == nil { logger.error("Could not create documents to send") }
+			let cborToSend = docToSend.toCBOR(options: CBOROptions())
+			let clearBytesToSend = cborToSend.encode()
+			let cipherData = try sessionEncryption.encrypt(clearBytesToSend)
+			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 11 : 20)
+			return .success(Data(sd.encode(options: CBOROptions())))
+		} catch { return .failure(error) }
+	}
+	
+	/// Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
+	/// - Parameters:
+	///   - requestData: Request data passed to the mdoc holder
+	///   - handler: Handler to call with the accept/reject flag
+	///   - devicePrivateKey: Device private key
+	///   - readerKeyRawData: reader key cbor data (if reader engagement is used)
+	/// - Returns: A ``DeviceRequest`` object
+
+	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [DeviceResponse], iaca: [SecCertificate], requestData: Data, devicePrivateKey: CoseKeyPrivate, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error> {
+		do {
+			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return .failure(Self.makeError(code: .requestDecodeError)) }
+			guard var se = SessionEstablishment(cbor: seCbor) else { logger.error("Request Data cannot be decoded to session establisment"); return .failure(Self.makeError(code: .requestDecodeError)) }
+			if se.eReaderKeyRawData == nil, let readerKeyRawData { se.eReaderKeyRawData = readerKeyRawData }
+			guard se.eReaderKey != nil else { logger.error("Reader key not available"); return .failure(Self.makeError(code: .readerKeyMissing)) }
+			let requestCipherData = se.data
+			guard let deviceEngagement else { logger.error("Device Engagement not initialized"); return .failure(Self.makeError(code: .deviceEngagementMissing)) }
+			// init session-encryption object from session establish message and device engagement, decrypt data
+			let sessionEncryption = SessionEncryption(se: se, de: deviceEngagement, handOver: handOver)
+			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return .failure(Self.makeError(code: .sessionEncryptionNotInitialized)) }
+			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return .failure(Self.makeError(code: .requestDecodeError)) }
+			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return .failure(Self.makeError(code: .requestDecodeError)) }
+			guard let (drTest, validRequestItems, errorRequestItems) = try Self.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey) else { logger.error("Valid request items nil"); return .failure(Self.makeError(code: .requestDecodeError)) }
+			let bInvalidReq = (drTest.documents == nil)
+			var params: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: validRequestItems, UserRequestKeys.error_items_requested.rawValue: errorRequestItems]
+			if let docR = deviceRequest.docRequests.first {
+				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
+				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let x509 = try? X509Certificate(der: certData), let issName = x509.issuerDistinguishedName, let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
+					params[UserRequestKeys.reader_certificate_issuer.rawValue] = MdocHelpers.getCN(from: issName)
+					params[UserRequestKeys.reader_auth_validated.rawValue] = b
+					if let reasonFailure { params[UserRequestKeys.reader_certificate_validation_message.rawValue] = reasonFailure }
+				}
+			}
+			return .success((sessionEncryption: sessionEncryption, deviceRequest: deviceRequest, params: params, isValidRequest: !bInvalidReq))
+		} catch { return .failure(error) }
+	}
+
 	
 	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, deviceResponses: [DeviceResponse], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKey: CoseKeyPrivate? = nil) throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)? {
 		let documents = deviceResponses.flatMap { $0.documents! }
