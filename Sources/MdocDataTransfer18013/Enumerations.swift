@@ -75,6 +75,7 @@ public enum InitializeKeys: String {
 	case device_private_key_data
 	case device_private_key_obj
 	case trusted_certificates
+	case device_auth_method
 }
 
 /// String keys for the user request dictionary
