@@ -13,6 +13,7 @@ let package = Package(
             targets: ["MdocDataTransfer18013"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git", .upToNextMajor(from: "0.1.0")), 
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", .upToNextMajor(from: "0.1.0")),
 	],
     targets: [
@@ -20,6 +21,7 @@ let package = Package(
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "MdocDataTransfer18013", dependencies: [
+                .product(name: "MdocDataModel18013", package: "eudi-lib-ios-iso18013-data-model"),
 				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security")]),
         .testTarget(
             name: "MdocDataTransfer18013Tests",

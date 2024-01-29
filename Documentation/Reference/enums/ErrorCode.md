@@ -15,6 +15,9 @@
   - `bleNotAuthorized`
   - `bleNotSupported`
   - `unexpected_error`
+  - `sessionEncryptionNotInitialized`
+  - `deviceEngagementMissing`
+  - `readerKeyMissing`
 - [Properties](#properties)
   - `description`
 
@@ -83,6 +86,24 @@ case bleNotSupported
 
 ```swift
 case unexpected_error
+```
+
+### `sessionEncryptionNotInitialized`
+
+```swift
+case sessionEncryptionNotInitialized
+```
+
+### `deviceEngagementMissing`
+
+```swift
+case deviceEngagementMissing
+```
+
+### `readerKeyMissing`
+
+```swift
+case readerKeyMissing
 ```
 
 ## Properties

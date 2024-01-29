@@ -7,7 +7,9 @@
 - [Cases](#cases)
   - `document_json_data`
   - `document_signup_response_data`
-  - `device_private_key`
+  - `document_signup_response_obj`
+  - `device_private_key_data`
+  - `device_private_key_obj`
   - `trusted_certificates`
 
 ```swift
@@ -29,10 +31,22 @@ case document_json_data
 case document_signup_response_data
 ```
 
-### `device_private_key`
+### `document_signup_response_obj`
 
 ```swift
-case device_private_key
+case document_signup_response_obj
+```
+
+### `device_private_key_data`
+
+```swift
+case device_private_key_data
+```
+
+### `device_private_key_obj`
+
+```swift
+case device_private_key_obj
 ```
 
 ### `trusted_certificates`
