@@ -6,6 +6,9 @@
 
 - [Methods](#methods)
   - `initializeData(parameters:)`
+  - `makeError(code:str:)`
+  - `getSessionDataToSend(sessionEncryption:status:docToSend:)`
+  - `decodeRequestAndInformUser(deviceEngagement:docs:iaca:requestData:devicePrivateKey:readerKeyRawData:handOver:)`
   - `getDeviceResponseToSend(deviceRequest:deviceResponses:selectedItems:sessionEncryption:eReaderKey:devicePrivateKey:)`
   - `CountNumBlocks(dataLength:maxBlockSize:)`
   - `CreateBlockCommand(data:blockId:maxBlockSize:)`
@@ -13,6 +16,7 @@
   - `checkCameraAccess(_:action:)`
   - `presentSettings(_:msg:)`
   - `getTopViewController(base:)`
+  - `getCN(from:)`
 
 ```swift
 public class MdocHelpers
@@ -26,6 +30,41 @@ Helper methods
 ```swift
 public static func initializeData(parameters: [String: Any]) -> (docs: [DeviceResponse], devicePrivateKey: CoseKeyPrivate?, iaca: [SecCertificate]?)?
 ```
+
+### `makeError(code:str:)`
+
+```swift
+public static func makeError(code: ErrorCode, str: String? = nil) -> NSError
+```
+
+### `getSessionDataToSend(sessionEncryption:status:docToSend:)`
+
+```swift
+public static func getSessionDataToSend(sessionEncryption: SessionEncryption?, status: TransferStatus, docToSend: DeviceResponse) -> Result<Data, Error>
+```
+
+### `decodeRequestAndInformUser(deviceEngagement:docs:iaca:requestData:devicePrivateKey:readerKeyRawData:handOver:)`
+
+```swift
+public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [DeviceResponse], iaca: [SecCertificate], requestData: Data, devicePrivateKey: CoseKeyPrivate, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error>
+```
+
+Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
+- Parameters:
+  - requestData: Request data passed to the mdoc holder
+  - handler: Handler to call with the accept/reject flag
+  - devicePrivateKey: Device private key
+  - readerKeyRawData: reader key cbor data (if reader engagement is used)
+- Returns: A ``DeviceRequest`` object
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| requestData | Request data passed to the mdoc holder |
+| handler | Handler to call with the accept/reject flag |
+| devicePrivateKey | Device private key |
+| readerKeyRawData | reader key cbor data (if reader engagement is used) |
 
 ### `getDeviceResponseToSend(deviceRequest:deviceResponses:selectedItems:sessionEncryption:eReaderKey:devicePrivateKey:)`
 
@@ -97,3 +136,11 @@ Present an alert controller with a message, and two actions, one to cancel, and 
 ### `getTopViewController(base:)`
 
 Finds the top view controller in the view hierarchy of the app. It is used to present a new view controller on top of any existing view controllers.
+
+### `getCN(from:)`
+
+```swift
+public static func getCN(from dn: String) -> String
+```
+
+Get the common name (CN) from the certificate distringuished name (DN)

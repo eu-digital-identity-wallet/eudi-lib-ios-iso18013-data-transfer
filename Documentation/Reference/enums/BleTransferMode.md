@@ -8,10 +8,6 @@
   - `server`
   - `client`
 - [Properties](#properties)
-  - `START_REQUEST`
-  - `END_REQUEST`
-  - `START_DATA`
-  - `END_DATA`
   - `BASE_UUID_SUFFIX_SERVICE`
   - `QRHandover`
 
@@ -37,30 +33,6 @@ case client
 ```
 
 ## Properties
-### `START_REQUEST`
-
-```swift
-static var START_REQUEST: [UInt8] = [0x01]
-```
-
-### `END_REQUEST`
-
-```swift
-static var END_REQUEST: [UInt8] = [0x02]
-```
-
-### `START_DATA`
-
-```swift
-static var START_DATA: [UInt8] = [0x01]
-```
-
-### `END_DATA`
-
-```swift
-static var END_DATA: [UInt8] = [0x00]
-```
-
 ### `BASE_UUID_SUFFIX_SERVICE`
 
 ```swift
