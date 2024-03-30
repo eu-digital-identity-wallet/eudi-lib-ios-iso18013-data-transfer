@@ -33,22 +33,22 @@ public typealias RequestItems = [String: [String: [String]]]
 /// Helper methods
 public class MdocHelpers {
 	
-	public static func initializeData(parameters: [String: Any]) -> (docs: [DeviceResponse], devicePrivateKey: CoseKeyPrivate?, iaca: [SecCertificate]?, dauthMethod: DeviceAuthMethod)? {
+	public static func initializeData(parameters: [String: Any]) -> (docs: [DeviceResponse], devicePrivateKeys: [CoseKeyPrivate], iaca: [SecCertificate]?, dauthMethod: DeviceAuthMethod)? {
 		var docs: [DeviceResponse]?
-		var devicePrivateKey: CoseKeyPrivate?
+		var devicePrivateKeys: [CoseKeyPrivate]?
 		var iaca: [SecCertificate]?
 		var deviceAuthMethod = DeviceAuthMethod.deviceMac
 		if let d = parameters[InitializeKeys.document_json_data.rawValue] as? [Data] {
 			// load json sample data here
 			let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
 			docs = sampleData.compactMap { $0.deviceResponse }
-			devicePrivateKey = sampleData.compactMap { $0.devicePrivateKey }.first
-		} else if let drs = parameters[InitializeKeys.document_signup_response_obj.rawValue] as? [DeviceResponse], let dpk = parameters[InitializeKeys.device_private_key_obj.rawValue] as? CoseKeyPrivate {
+			devicePrivateKeys = sampleData.compactMap { $0.devicePrivateKey }
+		} else if let drs = parameters[InitializeKeys.document_signup_response_obj.rawValue] as? [DeviceResponse], let dpk = parameters[InitializeKeys.device_private_key_obj.rawValue] as? [CoseKeyPrivate] {
 			docs = drs
-			devicePrivateKey = dpk
-		} else if let drsData = parameters[InitializeKeys.document_signup_response_data.rawValue] as? [Data], let dpk = parameters[InitializeKeys.device_private_key_data.rawValue] as? Data {
+			devicePrivateKeys = dpk
+		} else if let drsData = parameters[InitializeKeys.document_signup_response_data.rawValue] as? [Data], let dpks = parameters[InitializeKeys.device_private_key_data.rawValue] as? [Data] {
 			docs = drsData.compactMap({ DeviceResponse(data: [UInt8]($0))})
-			devicePrivateKey = CoseKeyPrivate(privateKeyx963Data: dpk, crv: .p256)
+			devicePrivateKeys = dpks.map { CoseKeyPrivate(privateKeyx963Data: $0, crv: .p256) }
 		}
 		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
 			iaca = i.compactMap {	SecCertificateCreateWithData(nil, $0 as CFData) }
@@ -56,8 +56,8 @@ public class MdocHelpers {
 		if let d = parameters[InitializeKeys.device_auth_method.rawValue] as? String, let dam = DeviceAuthMethod(rawValue: d) {
 			deviceAuthMethod = dam
 		}
-		guard let docs else { return nil }
-		return (docs, devicePrivateKey, iaca, deviceAuthMethod)
+		guard let docs, let devicePrivateKeys else { return nil }
+		return (docs, devicePrivateKeys, iaca, deviceAuthMethod)
 	}
 	
 	static var errorNoDocumentsDescriptionKey: String { "doctype_not_found" }
@@ -89,7 +89,7 @@ public class MdocHelpers {
 	///   - readerKeyRawData: reader key cbor data (if reader engagement is used)
 	/// - Returns: A ``DeviceRequest`` object
 
-	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [DeviceResponse], iaca: [SecCertificate], requestData: Data, devicePrivateKey: CoseKeyPrivate, dauthMethod: DeviceAuthMethod, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error> {
+	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [DeviceResponse], iaca: [SecCertificate], requestData: Data, devicePrivateKeys: [CoseKeyPrivate], dauthMethod: DeviceAuthMethod, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error> {
 		do {
 			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			guard var se = SessionEstablishment(cbor: seCbor) else { logger.error("Request Data cannot be decoded to session establisment"); return .failure(Self.makeError(code: .requestDecodeError)) }
@@ -102,7 +102,7 @@ public class MdocHelpers {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return .failure(Self.makeError(code: .sessionEncryptionNotInitialized)) }
 			guard let requestData = try sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return .failure(Self.makeError(code: .requestDecodeError)) }
-			guard let (drTest, validRequestItems, errorRequestItems) = try Self.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKey: devicePrivateKey, dauthMethod: dauthMethod) else { logger.error("Valid request items nil"); return .failure(Self.makeError(code: .requestDecodeError)) }
+			guard let (drTest, validRequestItems, errorRequestItems) = try Self.getDeviceResponseToSend(deviceRequest: deviceRequest, deviceResponses: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { logger.error("Valid request items nil"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			let bInvalidReq = (drTest.documents == nil)
 			var params: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: validRequestItems, UserRequestKeys.error_items_requested.rawValue: errorRequestItems]
 			if let docR = deviceRequest.docRequests.first {
@@ -118,7 +118,7 @@ public class MdocHelpers {
 	}
 
 	
-	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, deviceResponses: [DeviceResponse], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKey: CoseKeyPrivate? = nil, dauthMethod: DeviceAuthMethod) throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)? {
+	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, deviceResponses: [DeviceResponse], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKeys: [CoseKeyPrivate], dauthMethod: DeviceAuthMethod) throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)? {
 		let documents = deviceResponses.flatMap { $0.documents! }
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
@@ -127,11 +127,12 @@ public class MdocHelpers {
 		let reqDocTypes = haveDeviceRequest ? deviceRequest!.docRequests.map(\.itemsRequest.docType) : Array(selectedItems!.keys)
 		for reqDocType in reqDocTypes {
 			let docReq = deviceRequest?.docRequests.findDoc(name: reqDocType)
-			guard let doc = documents.findDoc(name: reqDocType) else {
+			guard let (doc,index) = documents.findDoc(name: reqDocType), devicePrivateKeys.count > index else {
 				docErrors.append([reqDocType: UInt64(0)])
 				errorReqItemsDocDict[reqDocType] = [:]
 				continue
 			}
+			let devicePrivateKey = devicePrivateKeys[index]
 			guard let issuerNs = doc.issuerSigned.issuerNameSpaces else { logger.error("Null issuer namespaces"); return nil }
 			var nsItemsToAdd = [NameSpace: [IssuerSignedItem]]()
 			var nsErrorsToAdd = [NameSpace : ErrorItems]()
@@ -165,7 +166,7 @@ public class MdocHelpers {
 				let issuerAuthToAdd = doc.issuerSigned.issuerAuth
 				let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
 				var devSignedToAdd: DeviceSigned? = nil
-				if let eReaderKey, let sessionEncryption, let devicePrivateKey {
+				if let eReaderKey, let sessionEncryption {
 					let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: devicePrivateKey)
 					let mdocAuth = MdocAuthentication(transcript: sessionEncryption.transcript, authKeys: authKeys)
 					guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: reqDocType, dauthMethod: dauthMethod) else {
