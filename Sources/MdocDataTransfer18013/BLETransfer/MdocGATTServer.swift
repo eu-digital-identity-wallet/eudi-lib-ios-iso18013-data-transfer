@@ -22,7 +22,6 @@ import CoreBluetooth
 import UIKit
 #endif
 import Logging
-import ASN1Decoder
 import MdocDataModel18013
 import MdocSecurity18013
 
