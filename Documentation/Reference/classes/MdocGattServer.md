@@ -62,10 +62,16 @@ public var docs: [DeviceResponse]!
 public var iaca: [SecCertificate]!
 ```
 
-### `devicePrivateKey`
+### `devicePrivateKeys`
 
 ```swift
-public var devicePrivateKey: CoseKeyPrivate!
+public var devicePrivateKeys: [CoseKeyPrivate]!
+```
+
+### `dauthMethod`
+
+```swift
+public var dauthMethod: DeviceAuthMethod
 ```
 
 ### `readerName`
@@ -74,10 +80,10 @@ public var devicePrivateKey: CoseKeyPrivate!
 public var readerName: String?
 ```
 
-### `qrCodeImageData`
+### `qrCodePayload`
 
 ```swift
-public var qrCodeImageData: Data?
+public var qrCodePayload: String?
 ```
 
 ### `delegate`
@@ -133,7 +139,7 @@ public init(parameters: [String: Any]) throws
 public func performDeviceEngagement(rfus: [String]? = nil)
 ```
 
-``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
+``qrCodePayload`` is set to QR code data corresponding to the device engagement.
 
 ### `stop()`
 

@@ -28,7 +28,7 @@ Helper methods
 ### `initializeData(parameters:)`
 
 ```swift
-public static func initializeData(parameters: [String: Any]) -> (docs: [DeviceResponse], devicePrivateKey: CoseKeyPrivate?, iaca: [SecCertificate]?)?
+public static func initializeData(parameters: [String: Any]) -> (docs: [DeviceResponse], devicePrivateKeys: [CoseKeyPrivate], iaca: [SecCertificate]?, dauthMethod: DeviceAuthMethod)?
 ```
 
 ### `makeError(code:str:)`
@@ -43,10 +43,10 @@ public static func makeError(code: ErrorCode, str: String? = nil) -> NSError
 public static func getSessionDataToSend(sessionEncryption: SessionEncryption?, status: TransferStatus, docToSend: DeviceResponse) -> Result<Data, Error>
 ```
 
-### `decodeRequestAndInformUser(deviceEngagement:docs:iaca:requestData:devicePrivateKey:readerKeyRawData:handOver:)`
+### `decodeRequestAndInformUser(deviceEngagement:docs:iaca:requestData:devicePrivateKeys:dauthMethod:readerKeyRawData:handOver:)`
 
 ```swift
-public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [DeviceResponse], iaca: [SecCertificate], requestData: Data, devicePrivateKey: CoseKeyPrivate, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error>
+public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [DeviceResponse], iaca: [SecCertificate], requestData: Data, devicePrivateKeys: [CoseKeyPrivate], dauthMethod: DeviceAuthMethod, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error>
 ```
 
 Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
@@ -66,10 +66,10 @@ Decrypt the contents of a data object and return a ``DeviceRequest`` object if t
 | devicePrivateKey | Device private key |
 | readerKeyRawData | reader key cbor data (if reader engagement is used) |
 
-### `getDeviceResponseToSend(deviceRequest:deviceResponses:selectedItems:sessionEncryption:eReaderKey:devicePrivateKey:)`
+### `getDeviceResponseToSend(deviceRequest:deviceResponses:selectedItems:sessionEncryption:eReaderKey:devicePrivateKeys:dauthMethod:)`
 
 ```swift
-public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, deviceResponses: [DeviceResponse], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKey: CoseKeyPrivate? = nil) throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)?
+public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, deviceResponses: [DeviceResponse], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKeys: [CoseKeyPrivate], dauthMethod: DeviceAuthMethod) throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)?
 ```
 
 ### `CountNumBlocks(dataLength:maxBlockSize:)`

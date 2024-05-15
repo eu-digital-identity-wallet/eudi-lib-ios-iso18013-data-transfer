@@ -54,3 +54,9 @@ case device_private_key_obj
 ```swift
 case trusted_certificates
 ```
+
+### `device_auth_method`
+
+```swift
+case device_auth_method
+```
