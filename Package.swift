@@ -13,7 +13,7 @@ let package = Package(
             targets: ["MdocDataTransfer18013"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git", .upToNextMajor(from: "0.1.0")), 
+	.package(url: "https://github.com/DSRCorporation/eudi-lib-ios-iso18013-data-model.git", branch: "feat/get-qr-code-string-payload"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", .upToNextMajor(from: "0.2.0")),
 	],
     targets: [

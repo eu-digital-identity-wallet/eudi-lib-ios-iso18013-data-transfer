@@ -3,10 +3,10 @@
     {
       "identity" : "eudi-lib-ios-iso18013-data-model",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
+      "location" : "https://github.com/DSRCorporation/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "44464efb1ab5a35c6b5863736e34f973b3313a74",
-        "version" : "0.2.2"
+        "branch" : "feat/get-qr-code-string-payload",
+        "revision" : "43832fb89ff1b2df51a2e89c61e5623cdb986cc7"
       }
     },
     {

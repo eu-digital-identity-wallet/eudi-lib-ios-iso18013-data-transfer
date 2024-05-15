@@ -40,7 +40,7 @@ public class MdocGattServer: ObservableObject {
 	public var devicePrivateKeys: [CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
 	public var readerName: String?
-	public var qrCodeImageData: Data?
+	public var qrCodePayload: String?
 	public weak var delegate: (any MdocOfflineDelegate)?
 	public var advertising: Bool = false
 	public var error: Error? = nil  { willSet { handleErrorSet(newValue) }}
@@ -79,7 +79,7 @@ public class MdocGattServer: ObservableObject {
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
 			logger.info("CBPeripheralManager didUpdateState:")
 			logger.info(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")
-			if peripheral.state == .poweredOn, server.qrCodeImageData != nil { server.start() }
+			if peripheral.state == .poweredOn, server.qrCodePayload != nil { server.start() }
 		}
 		
 		func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
@@ -134,7 +134,7 @@ public class MdocGattServer: ObservableObject {
 	
 	// Create a new device engagement object and start the device engagement process.
 	///
-	/// ``qrCodeImageData`` is set to QR code image data corresponding to the device engagement.
+	/// ``qrCodePayload`` is set to QR code data corresponding to the device engagement.
 	public func performDeviceEngagement(rfus: [String]? = nil) {
 		guard !isPreview && !isInErrorState else { 
 			logger.info("Current status is \(status)")
@@ -145,10 +145,8 @@ public class MdocGattServer: ObservableObject {
 		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256, rfus: rfus)
 		sessionEncryption = nil
 #if os(iOS)
-		/// get qrCode image data corresponding to the device engagement
-		guard let qrCodeImage = deviceEngagement!.getQrCodeImage() else { error = MdocHelpers.makeError(code: .unexpected_error, str: "Null Device engagement"); return }
-		qrCodeImageData = qrCodeImage.pngData()
-		logger.info("Created qrCode with size \(qrCodeImageData!.count)")
+		qrCodePayload = deviceEngagement!.getQrCodePayload()
+		logger.info("Created qrCode payload: \(qrCodePayload!)")
 #endif
 		guard docs.allSatisfy({ $0.documents != nil }) else { error = MdocHelpers.makeError(code: .invalidInputDocument); return }
 		// Check that the peripheral manager has been authorized to use Bluetooth.
@@ -197,7 +195,7 @@ public class MdocGattServer: ObservableObject {
 	public func stop() {
 		guard !isPreview else { return }
 		if let peripheralManager, peripheralManager.isAdvertising { peripheralManager.stopAdvertising() }
-		qrCodeImageData = nil
+		qrCodePayload = nil
 		advertising = false
 		subscribeCount = 0
 		if status == .error && initSuccess { status = .initializing }
