@@ -14,7 +14,7 @@ let package = Package(
     ],
     dependencies: [
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git", .upToNextMajor(from: "0.2.4")),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", .upToNextMajor(from: "0.2.0")),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", .upToNextMajor(from: "0.2.1")),
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
