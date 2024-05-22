@@ -117,8 +117,7 @@ public class MdocHelpers {
 		} catch { return .failure(error) }
 	}
 
-	
-	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, deviceResponses: [DeviceResponse], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKeys: [CoseKeyPrivate], dauthMethod: DeviceAuthMethod) throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)? {
+	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, deviceResponses: [DeviceResponse], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKeys: [CoseKeyPrivate], sessionTranscript: SessionTranscript? = nil,  dauthMethod: DeviceAuthMethod) throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)? {
 		let documents = deviceResponses.flatMap { $0.documents! }
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
@@ -166,9 +165,10 @@ public class MdocHelpers {
 				let issuerAuthToAdd = doc.issuerSigned.issuerAuth
 				let issToAdd = IssuerSigned(issuerNameSpaces: IssuerNameSpaces(nameSpaces: nsItemsToAdd), issuerAuth: issuerAuthToAdd)
 				var devSignedToAdd: DeviceSigned? = nil
-				if let eReaderKey, let sessionEncryption {
+				let sessionTranscript = sessionEncryption?.transcript ?? sessionTranscript
+				if let eReaderKey, let sessionTranscript {
 					let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: devicePrivateKey)
-					let mdocAuth = MdocAuthentication(transcript: sessionEncryption.transcript, authKeys: authKeys)
+					let mdocAuth = MdocAuthentication(transcript: sessionTranscript, authKeys: authKeys)
 					guard let devAuth = try mdocAuth.getDeviceAuthForTransfer(docType: reqDocType, dauthMethod: dauthMethod) else {
 						logger.error("Cannot create device auth"); return nil
 					}
