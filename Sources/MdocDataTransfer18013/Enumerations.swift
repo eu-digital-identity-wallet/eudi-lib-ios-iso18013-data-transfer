@@ -70,8 +70,8 @@ public enum ErrorCode: Int, CustomStringConvertible {
 /// String keys for the initialization dictionary
 public enum InitializeKeys: String {
 	case document_json_data
-	case document_signup_response_data
-	case document_signup_response_obj
+	case document_signup_issuer_signed_data
+	case document_signup_issuer_signed_obj
 	case device_private_key_data
 	case device_private_key_obj
 	case trusted_certificates
