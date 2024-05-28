@@ -83,10 +83,12 @@ public class MdocHelpers {
 	
 	/// Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
 	/// - Parameters:
-	///   - requestData: Request data passed to the mdoc holder
-	///   - handler: Handler to call with the accept/reject flag
-	///   - devicePrivateKey: Device private key
-	///   - readerKeyRawData: reader key cbor data (if reader engagement is used)
+	///   - deviceEngagement: deviceEngagement
+	///   - docs: IssuerSigned documents
+	///   - iaca: Root certificates trusted
+	///   - devicePrivateKeys: Device private keys
+	///   - dauthMethod: Method to perform mdoc authentication
+	///   - handOver: handOver structure
 	/// - Returns: A ``DeviceRequest`` object
 
 	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [IssuerSigned], iaca: [SecCertificate], requestData: Data, devicePrivateKeys: [CoseKeyPrivate], dauthMethod: DeviceAuthMethod, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error> {
