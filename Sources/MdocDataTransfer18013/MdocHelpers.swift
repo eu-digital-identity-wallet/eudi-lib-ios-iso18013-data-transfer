@@ -134,7 +134,9 @@ public class MdocHelpers {
 				continue
 			}
 			let devicePrivateKey = devicePrivateKeys[index]
-			guard let issuerNs = doc.issuerNameSpaces else { logger.error("Null issuer namespaces"); return nil }
+			// Document's data must be in CBOR bytes that has the IssuerSigned structure according to ISO 23220-4
+			// Currently, the library does not support IssuerSigned structure without the nameSpaces field.
+			guard let issuerNs = doc.issuerNameSpaces else { logger.error("Document does not contain issuer namespaces"); return nil }
 			var nsItemsToAdd = [NameSpace: [IssuerSignedItem]]()
 			var nsErrorsToAdd = [NameSpace: ErrorItems]()
 			var validReqItemsNsDict = [NameSpace: [String]]()
