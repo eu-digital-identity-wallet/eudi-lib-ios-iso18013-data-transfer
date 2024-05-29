@@ -35,7 +35,7 @@ public class MdocGattServer: ObservableObject {
 	public var deviceEngagement: DeviceEngagement?
 	public var deviceRequest: DeviceRequest?
 	public var sessionEncryption: SessionEncryption?
-	public var docs: [DeviceResponse]!
+	public var docs: [IssuerSigned]!
 	public var iaca: [SecCertificate]!
 	public var devicePrivateKeys: [CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
@@ -148,7 +148,7 @@ public class MdocGattServer: ObservableObject {
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
 		logger.info("Created qrCode payload: \(qrCodePayload!)")
 #endif
-		guard docs.allSatisfy({ $0.documents != nil }) else { error = MdocHelpers.makeError(code: .invalidInputDocument); return }
+		guard docs.allSatisfy({ $0.issuerNameSpaces != nil }) else { error = MdocHelpers.makeError(code: .invalidInputDocument); return }
 		// Check that the peripheral manager has been authorized to use Bluetooth.
 		guard peripheralManager.state != .unauthorized else { error = MdocHelpers.makeError(code: .bleNotAuthorized); return }
 		start()
@@ -255,7 +255,7 @@ public class MdocGattServer: ObservableObject {
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, deviceResponses: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return  }
+				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return  }
 				guard let dts = drToSend.documents, !dts.isEmpty else { errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return  }
 				let dataRes = MdocHelpers.getSessionDataToSend(sessionEncryption: sessionEncryption, status: .requestReceived, docToSend: drToSend)
 				switch dataRes {
