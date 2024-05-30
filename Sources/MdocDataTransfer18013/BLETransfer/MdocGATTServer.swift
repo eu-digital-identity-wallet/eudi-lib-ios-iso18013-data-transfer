@@ -35,9 +35,9 @@ public class MdocGattServer: ObservableObject {
 	public var deviceEngagement: DeviceEngagement?
 	public var deviceRequest: DeviceRequest?
 	public var sessionEncryption: SessionEncryption?
-	public var docs: [IssuerSigned]!
+	public var docs: [String: IssuerSigned]!
 	public var iaca: [SecCertificate]!
-	public var devicePrivateKeys: [CoseKeyPrivate]!
+	public var devicePrivateKeys: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
 	public var readerName: String?
 	public var qrCodePayload: String?
@@ -148,7 +148,8 @@ public class MdocGattServer: ObservableObject {
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
 		logger.info("Created qrCode payload: \(qrCodePayload!)")
 #endif
-		guard docs.allSatisfy({ $0.issuerNameSpaces != nil }) else { error = MdocHelpers.makeError(code: .invalidInputDocument); return }
+		// todo: issuerNameSpaces is not mandatory according to specs, need to change
+		guard docs.values.allSatisfy({ $0.issuerNameSpaces != nil }) else { error = MdocHelpers.makeError(code: .invalidInputDocument); return }
 		// Check that the peripheral manager has been authorized to use Bluetooth.
 		guard peripheralManager.state != .unauthorized else { error = MdocHelpers.makeError(code: .bleNotAuthorized); return }
 		start()
