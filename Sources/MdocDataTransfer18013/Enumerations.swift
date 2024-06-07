@@ -85,4 +85,5 @@ public enum UserRequestKeys: String {
 	case reader_certificate_issuer
 	case reader_auth_validated
 	case reader_certificate_validation_message
+	case reader_legal_name
 }
