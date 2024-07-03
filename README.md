@@ -70,6 +70,9 @@ The request dictionary in ``didReceiveRequest`` delegate method has the followin
 
 The BLE server will send the requested if the user accepts. In the case the client app must call the `handleAccept` callback with `true`.
 
+### Documentation
+Detail documentation reference is provided [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-transfer/documentation/mdocdatatransfer18013/)
+
 ### Disclaimer
 The released software is a initial development release version: 
 -  The initial development release is an early endeavor reflecting the efforts of a short timeboxed period, and by no means can be considered as the final product.  
