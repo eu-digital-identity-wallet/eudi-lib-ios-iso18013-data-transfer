@@ -13,6 +13,7 @@ let package = Package(
             targets: ["MdocDataTransfer18013"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git", .upToNextMajor(from: "0.2.6")),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", .upToNextMajor(from: "0.2.1")),
 	],
