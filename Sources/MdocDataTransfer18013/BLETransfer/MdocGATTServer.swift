@@ -216,7 +216,7 @@ public class MdocGattServer: ObservableObject {
 				self.deviceRequest = decoded.deviceRequest
 				sessionEncryption = decoded.sessionEncryption
 				if decoded.isValidRequest {
-					delegate?.didReceiveRequest(decoded.params, handleSelected: userSelected)
+					delegate?.didReceiveRequest(decoded.userRequestInfo, handleSelected: userSelected)
 				} else {
 					userSelected(false, nil)
 				}
