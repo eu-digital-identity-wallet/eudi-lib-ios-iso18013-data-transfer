@@ -19,7 +19,7 @@ limitations under the License.
 import Foundation
 
 /// Transfer status enumeration
-public enum TransferStatus: String {
+public enum TransferStatus: String, Sendable {
 	case initializing
 	case initialized
 	case qrEngagementReady
@@ -33,7 +33,7 @@ public enum TransferStatus: String {
 }
 
 /// Possible error codes
-public enum ErrorCode: Int, CustomStringConvertible {
+public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 	case documents_not_provided
 	case invalidInputDocument
 	case invalidUrl
@@ -68,7 +68,7 @@ public enum ErrorCode: Int, CustomStringConvertible {
 }
 
 /// String keys for the initialization dictionary
-public enum InitializeKeys: String {
+public enum InitializeKeys: String, Sendable {
 	case document_json_data
 	case document_signup_issuer_signed_data
 	case document_signup_issuer_signed_obj
@@ -79,7 +79,7 @@ public enum InitializeKeys: String {
 }
 
 /// String keys for the user request dictionary
-public enum UserRequestKeys: String {
+public enum UserRequestKeys: String, Sendable {
 	case valid_items_requested
 	case error_items_requested
 	case reader_certificate_issuer

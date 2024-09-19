@@ -11,13 +11,10 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: swift-actions/setup-swift@v1
+      - uses: swift-actions/setup-swift@v2
       - name: Get swift version
-        run: swift --version # Swift 5.8
-      - uses: actions/checkout@v3
-      - name: Fix Up Private GitHub URLs
-        # Add personal access token to all private repo URLs 
-        run: find . -type f \( -name 'Package.swift' -o -name 'Package.resolved' \) -exec sed -i '' "s/https:\/\/github.com\/eu-digital-identity-wallet/https:\/\/${{ secrets.USER_NAME }}:${{ secrets.USER_GITHUB_TOKEN }}@github.com\/eu-digital-identity-wallet/g" {} \;
+        run: swift --version 
+      - uses: actions/checkout@v4
       - name: Build
         run: swift build
       - name: Run tests

@@ -142,7 +142,7 @@ public class MdocHelpers {
 			var docReq: DocRequest? // if selected items is null
 			if haveSelectedItems == false {
 				docReq = deviceRequest?.docRequests.findDoc(name: reqDocIdOrDocType)
-				guard let (doc, _) = Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType) else {
+				guard let (_, _) = Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType) else {
 					docErrors.append([reqDocIdOrDocType: UInt64(0)])
 					errorReqItemsDocDict[reqDocIdOrDocType] = [:]
 					continue
@@ -254,6 +254,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - vc: The view controller that will present the settings
 	///   - action: The action to perform
+	@MainActor
 	public static func checkBleAccess(_ vc: UIViewController, action: @escaping ()->Void) {
 		switch CBManager.authorization {
 		case .denied:
@@ -275,6 +276,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - vc:  The view controller that will present the settings
 	///   - action: The action to perform
+	@MainActor
 	public static func checkCameraAccess(_ vc: UIViewController, action: @escaping ()->Void) {
 		switch AVCaptureDevice.authorizationStatus(for: .video) {
 		case .denied:
@@ -302,6 +304,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - vc: The view controller that will present the settings
 	///   - msg: The message to show
+	@MainActor
 	public static func presentSettings(_ vc: UIViewController, msg: String) {
 		let alertController = UIAlertController(title: NSLocalizedString("error", comment: ""), message: msg, preferredStyle: .alert)
 		alertController.addAction(UIAlertAction(title: NSLocalizedString("cancel", comment: ""), style: .default))
@@ -316,6 +319,7 @@ public class MdocHelpers {
 	}
 	
 	/// Finds the top view controller in the view hierarchy of the app. It is used to present a new view controller on top of any existing view controllers.
+	@MainActor
 	public static func getTopViewController(base: UIViewController? = UIApplication.shared.windows.first { $0.isKeyWindow }?.rootViewController) -> UIViewController? {
 		if let nav = base as? UINavigationController {
 			return getTopViewController(base: nav.visibleViewController)

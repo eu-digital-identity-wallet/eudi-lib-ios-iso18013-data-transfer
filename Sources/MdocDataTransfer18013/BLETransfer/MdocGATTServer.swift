@@ -26,6 +26,7 @@ import MdocDataModel18013
 import MdocSecurity18013
 
 /// BLE Gatt server implementation of mdoc transfer manager
+@MainActor
 public class MdocGattServer: ObservableObject {
 	var peripheralManager: CBPeripheralManager!
 	var bleDelegate: Delegate!
@@ -64,8 +65,9 @@ public class MdocGattServer: ObservableObject {
 		handleStatusChange(status)
 	}
 	
-	@objc(CBPeripheralManagerDelegate)
-	class Delegate: NSObject, CBPeripheralManagerDelegate {
+	@MainActor
+	@objc(CBPeripheralManagerDelegate) 
+	class Delegate: NSObject, @preconcurrency CBPeripheralManagerDelegate {
 		unowned var server: MdocGattServer
 		
 		init(server: MdocGattServer) {
