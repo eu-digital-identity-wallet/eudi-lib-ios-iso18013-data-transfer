@@ -110,8 +110,7 @@ public class MdocHelpers {
 			var userRequestInfo = UserRequestInfo(validItemsRequested: validRequestItems, errorItemsRequested: errorRequestItems)
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
-				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
-					//params[UserRequestKeys.reader_certificate_issuer.rawValue]
+				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, case let certData = docR.readerCertificates, certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthX5c: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
 					userRequestInfo.readerCertificateIssuer = MdocHelpers.getCN(from: x509.subject.description)
 					userRequestInfo.readerAuthValidated = b
 					if let reasonFailure {  userRequestInfo.readerCertificateValidationMessage = reasonFailure }
