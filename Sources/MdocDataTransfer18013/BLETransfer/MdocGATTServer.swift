@@ -26,8 +26,7 @@ import MdocDataModel18013
 import MdocSecurity18013
 
 /// BLE Gatt server implementation of mdoc transfer manager
-@MainActor
-public class MdocGattServer: ObservableObject {
+public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	var peripheralManager: CBPeripheralManager!
 	var bleDelegate: Delegate!
 	var remoteCentral: CBCentral!
@@ -65,8 +64,7 @@ public class MdocGattServer: ObservableObject {
 		handleStatusChange(status)
 	}
 	
-	@MainActor
-	@objc(CBPeripheralManagerDelegate) 
+	@objc(CBPeripheralManagerDelegate)
 	class Delegate: NSObject, @preconcurrency CBPeripheralManagerDelegate {
 		unowned var server: MdocGattServer
 		
@@ -251,7 +249,6 @@ public class MdocGattServer: ObservableObject {
 			prepareDataToSend(bytesToSend)
 			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
 				self.sendDataWithUpdates()
-				self.error = errorToSend 
 			}
 		}
 		if !b { errorToSend = MdocHelpers.makeError(code: .userRejected) }
