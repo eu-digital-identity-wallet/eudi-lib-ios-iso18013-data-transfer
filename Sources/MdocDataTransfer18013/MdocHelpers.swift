@@ -92,7 +92,7 @@ public class MdocHelpers {
 	///   - handOver: handOver structure
 	/// - Returns: A ``DeviceRequest`` object
 
-	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [String: IssuerSigned], iaca: [SecCertificate], requestData: Data, devicePrivateKeys: [String: CoseKeyPrivate], dauthMethod: DeviceAuthMethod, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, params: [String: Any], isValidRequest: Bool), Error> {
+	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [String: IssuerSigned], iaca: [SecCertificate], requestData: Data, devicePrivateKeys: [String: CoseKeyPrivate], dauthMethod: DeviceAuthMethod, readerKeyRawData: [UInt8]?, handOver: CBOR) -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo, isValidRequest: Bool), Error> {
 		do {
 			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			guard var se = SessionEstablishment(cbor: seCbor) else { logger.error("Request Data cannot be decoded to session establisment"); return .failure(Self.makeError(code: .requestDecodeError)) }
@@ -107,16 +107,16 @@ public class MdocHelpers {
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			guard let (drTest, validRequestItems, errorRequestItems) = try Self.getDeviceResponseToSend(deviceRequest: deviceRequest, issuerSigned: docs, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { logger.error("Valid request items nil"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			let bInvalidReq = (drTest.documents == nil)
-			var params: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: validRequestItems, UserRequestKeys.error_items_requested.rawValue: errorRequestItems]
+			var userRequestInfo = UserRequestInfo(validItemsRequested: validRequestItems, errorItemsRequested: errorRequestItems)
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
-				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, let certData = docR.readerCertificate, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthCertificate: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
-					params[UserRequestKeys.reader_certificate_issuer.rawValue] = MdocHelpers.getCN(from: x509.subject.description)
-					params[UserRequestKeys.reader_auth_validated.rawValue] = b
-					if let reasonFailure { params[UserRequestKeys.reader_certificate_validation_message.rawValue] = reasonFailure }
+				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, case let certData = docR.readerCertificates, certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthX5c: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
+					userRequestInfo.readerCertificateIssuer = MdocHelpers.getCN(from: x509.subject.description)
+					userRequestInfo.readerAuthValidated = b
+					if let reasonFailure {  userRequestInfo.readerCertificateValidationMessage = reasonFailure }
 				}
 			}
-			return .success((sessionEncryption: sessionEncryption, deviceRequest: deviceRequest, params: params, isValidRequest: !bInvalidReq))
+			return .success((sessionEncryption: sessionEncryption, deviceRequest: deviceRequest, userRequestInfo: userRequestInfo, isValidRequest: !bInvalidReq))
 		} catch { return .failure(error) }
 	}
 	
@@ -142,7 +142,7 @@ public class MdocHelpers {
 			var docReq: DocRequest? // if selected items is null
 			if haveSelectedItems == false {
 				docReq = deviceRequest?.docRequests.findDoc(name: reqDocIdOrDocType)
-				guard let (doc, _) = Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType) else {
+				guard let (_, _) = Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType) else {
 					docErrors.append([reqDocIdOrDocType: UInt64(0)])
 					errorReqItemsDocDict[reqDocIdOrDocType] = [:]
 					continue
@@ -254,6 +254,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - vc: The view controller that will present the settings
 	///   - action: The action to perform
+	@MainActor
 	public static func checkBleAccess(_ vc: UIViewController, action: @escaping ()->Void) {
 		switch CBManager.authorization {
 		case .denied:
@@ -275,6 +276,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - vc:  The view controller that will present the settings
 	///   - action: The action to perform
+	@MainActor
 	public static func checkCameraAccess(_ vc: UIViewController, action: @escaping ()->Void) {
 		switch AVCaptureDevice.authorizationStatus(for: .video) {
 		case .denied:
@@ -302,6 +304,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - vc: The view controller that will present the settings
 	///   - msg: The message to show
+	@MainActor
 	public static func presentSettings(_ vc: UIViewController, msg: String) {
 		let alertController = UIAlertController(title: NSLocalizedString("error", comment: ""), message: msg, preferredStyle: .alert)
 		alertController.addAction(UIAlertAction(title: NSLocalizedString("cancel", comment: ""), style: .default))
@@ -316,6 +319,7 @@ public class MdocHelpers {
 	}
 	
 	/// Finds the top view controller in the view hierarchy of the app. It is used to present a new view controller on top of any existing view controllers.
+	@MainActor
 	public static func getTopViewController(base: UIViewController? = UIApplication.shared.windows.first { $0.isKeyWindow }?.rootViewController) -> UIViewController? {
 		if let nav = base as? UINavigationController {
 			return getTopViewController(base: nav.visibleViewController)

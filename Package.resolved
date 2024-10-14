@@ -1,12 +1,13 @@
 {
+  "originHash" : "fc60708f41996a66ff09913bb5bc0934ff3d47779d3ec833bf24adbed0bb2ad4",
   "pins" : [
     {
       "identity" : "eudi-lib-ios-iso18013-data-model",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "12314daf45d637a1afeda321d605f328d422fe8d",
-        "version" : "0.2.6"
+        "revision" : "c1b4383d6fc3387a8ed4c79177548624c4e34e3a",
+        "version" : "0.3.3"
       }
     },
     {
@@ -14,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "41a7ba66ff5d614c9ef7d50607ef0a9af7ebb577",
-        "version" : "0.2.1"
+        "revision" : "13d65a1010ee9e6219f8bccbab6eb32f67405d86",
+        "version" : "0.2.6"
       }
     },
     {
@@ -41,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-collections.git",
       "state" : {
-        "revision" : "ee97538f5b81ae89698fd95938896dec5217b148",
-        "version" : "1.1.1"
+        "revision" : "671108c96644956dddcd89dd59c203dcdb36cec7",
+        "version" : "1.1.4"
       }
     },
     {
@@ -50,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "bc1c29221f6dfeb0ebbfbc98eb95cd3d4967868e",
-        "version" : "3.4.0"
+        "revision" : "46072478ca365fe48370993833cb22de9b41567f",
+        "version" : "3.5.2"
       }
     },
     {
@@ -77,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
-        "revision" : "e97a6fcb1ab07462881ac165fdbb37f067e205d5",
-        "version" : "1.5.4"
+        "revision" : "9cb486020ebf03bfa5b5df985387a14a98744537",
+        "version" : "1.6.1"
       }
     },
     {
@@ -86,10 +87,10 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/niscy-eudiw/SwiftCBOR.git",
       "state" : {
-        "revision" : "310dbc3975a5653237fed304d88a6dd59d04dd30",
-        "version" : "0.5.7"
+        "revision" : "2c8c55273d4c4aae21bb46c2afbae79ee072eff4",
+        "version" : "0.6.2"
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }
