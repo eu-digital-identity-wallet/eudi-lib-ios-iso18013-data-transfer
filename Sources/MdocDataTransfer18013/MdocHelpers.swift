@@ -38,18 +38,9 @@ public class MdocHelpers {
 		var devicePrivateKeys: [String: CoseKeyPrivate]?
 		var iaca: [SecCertificate]?
 		var deviceAuthMethod = DeviceAuthMethod.deviceMac
-		if let d = parameters[InitializeKeys.document_json_data.rawValue] as? [Data] {
-			// load json sample data here, deprecated
-			let sampleData = d.compactMap { $0.decodeJSON(type: SignUpResponse.self) }
-			let randomIds = (0..<d.count).map { _ in UUID().uuidString }
-			docs = Dictionary(uniqueKeysWithValues: sampleData.compactMap { $0.deviceResponse?.documents?.map(\.issuerSigned).first }.enumerated().map { (randomIds[$0], $1) })
-			devicePrivateKeys = Dictionary(uniqueKeysWithValues: sampleData.compactMap { $0.devicePrivateKey }.enumerated().map { (randomIds[$0], $1) })
-		} else if let issObjs = parameters[InitializeKeys.document_signup_issuer_signed_obj.rawValue] as? [String: IssuerSigned], let dpk = parameters[InitializeKeys.device_private_key_obj.rawValue] as? [String: CoseKeyPrivate] {
+		if let issObjs = parameters[InitializeKeys.document_signup_issuer_signed_obj.rawValue] as? [String: IssuerSigned], let dpk = parameters[InitializeKeys.device_private_key_obj.rawValue] as? [String: CoseKeyPrivate] {
 			docs = issObjs
 			devicePrivateKeys = dpk
-		} else if let issData = parameters[InitializeKeys.document_signup_issuer_signed_data.rawValue] as? [String: Data], let dpks = parameters[InitializeKeys.device_private_key_data.rawValue] as? [String: Data] {
-			docs = issData.compactMapValues({ IssuerSigned(data: [UInt8]($0))})
-			devicePrivateKeys = dpks.mapValues { CoseKeyPrivate(privateKeyx963Data: $0, crv: .P256) }
 		}
 		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
 			iaca = i.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
@@ -150,7 +141,7 @@ public class MdocHelpers {
 			} else {
 				guard issuerSigned[reqDocIdOrDocType] != nil else { continue }
 			}
-			let devicePrivateKey = devicePrivateKeys[reqDocIdOrDocType] ?? CoseKeyPrivate(crv: .P256) // used only if doc.id
+			let devicePrivateKey = devicePrivateKeys[reqDocIdOrDocType] ?? (try! CoseKeyPrivate(curve: .P256, secureArea: SecureAreaRegistry.shared.defaultSecurityArea!)) // used only if doc.id
 			let doc = if haveSelectedItems { issuerSigned[reqDocIdOrDocType]! } else { Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType)!.0 }
 			// Document's data must be in CBOR bytes that has the IssuerSigned structure according to ISO 23220-4
 			// Currently, the library does not support IssuerSigned structure without the nameSpaces field.
