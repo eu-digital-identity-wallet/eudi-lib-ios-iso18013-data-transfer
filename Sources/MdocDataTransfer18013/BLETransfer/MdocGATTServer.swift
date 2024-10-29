@@ -135,14 +135,14 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	// Create a new device engagement object and start the device engagement process.
 	///
 	/// ``qrCodePayload`` is set to QR code data corresponding to the device engagement.
-	public func performDeviceEngagement(secureArea: any SecureArea, rfus: [String]? = nil) {
-		guard !isPreview && !isInErrorState else { 
+	public func performDeviceEngagement(secureArea: any SecureArea, crv: CoseEcCurve, rfus: [String]? = nil) {
+		guard !isPreview && !isInErrorState else {
 			logger.info("Current status is \(status)")
 			return
 		}
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = MdocHelpers.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
-		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .P256, secureArea: secureArea, rfus: rfus)
+		deviceEngagement = DeviceEngagement(isBleServer: true, crv: crv, secureArea: secureArea, rfus: rfus)
 		sessionEncryption = nil
 #if os(iOS)
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
@@ -199,6 +199,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		qrCodePayload = nil
 		advertising = false
 		subscribeCount = 0
+		if let pk = deviceEngagement?.privateKey { try?  pk.secureArea.deleteKey(id: pk.privateKeyId) }
 		if status == .error && initSuccess { status = .initializing }
 	}
 	
