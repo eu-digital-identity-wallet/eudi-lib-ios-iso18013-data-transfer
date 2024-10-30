@@ -65,7 +65,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	}
 	
 	@objc(CBPeripheralManagerDelegate)
-	class Delegate: NSObject, @preconcurrency CBPeripheralManagerDelegate {
+	class Delegate: NSObject, CBPeripheralManagerDelegate {
 		unowned var server: MdocGattServer
 		
 		init(server: MdocGattServer) {
@@ -199,7 +199,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		qrCodePayload = nil
 		advertising = false
 		subscribeCount = 0
-		if let pk = deviceEngagement?.privateKey { try?  pk.secureArea.deleteKey(id: pk.privateKeyId) }
+		if let pk = deviceEngagement?.privateKey { try? pk.secureArea.deleteKey(id: pk.privateKeyId); deviceEngagement?.privateKey = nil }
 		if status == .error && initSuccess { status = .initializing }
 	}
 	
@@ -268,6 +268,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 				}
 			}
 			catch { errorToSend = error }
+			if let errorToSend { logger.error("Error sending data: \(errorToSend)")}
 		}
 	}
 	
