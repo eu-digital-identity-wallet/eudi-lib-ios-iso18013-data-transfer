@@ -142,7 +142,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		}
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = MdocHelpers.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
-		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .P256, rfus: rfus)
+		deviceEngagement = DeviceEngagement(isBleServer: true, crv: .p256, rfus: rfus)
 		sessionEncryption = nil
 #if os(iOS)
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
