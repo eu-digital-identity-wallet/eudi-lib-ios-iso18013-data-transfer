@@ -45,6 +45,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	public var advertising: Bool = false
 	public var error: Error? = nil  { willSet { handleErrorSet(newValue) }}
 	public var status: TransferStatus = .initializing { willSet { handleStatusChange(newValue) } }
+	public var unlockData: [String: Data]!
 	var readBuffer = Data()
 	var sendBuffer = [Data]()
 	var numBlocks: Int = 0
@@ -209,7 +210,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		delegate?.didChangeStatus(newValue)
 		if newValue == .requestReceived {
 			peripheralManager.stopAdvertising()
-			let decodedRes = MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, iaca: iaca, requestData: readBuffer, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
+			let decodedRes = MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, iaca: iaca, requestData: readBuffer, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
 			switch decodedRes {
 			case .success(let decoded):
 				self.deviceRequest = decoded.deviceRequest
@@ -256,7 +257,9 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return  }
+				guard let (drToSend, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData) else {
+					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return
+				}
 				guard let dts = drToSend.documents, !dts.isEmpty else { errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return  }
 				let dataRes = MdocHelpers.getSessionDataToSend(sessionEncryption: sessionEncryption, status: .requestReceived, docToSend: drToSend)
 				switch dataRes {
