@@ -28,7 +28,7 @@ import SwiftCBOR
 import Logging
 import X509
 
-public typealias RequestItems = [String: [String: [String]]]
+public typealias RequestItems = [String: [String: [RequestItem]]]
 
 /// Helper methods
 public class MdocHelpers {
@@ -157,11 +157,11 @@ public class MdocHelpers {
 			guard let issuerNs = doc.issuerNameSpaces else { logger.error("Document does not contain issuer namespaces"); return nil }
 			var nsItemsToAdd = [NameSpace: [IssuerSignedItem]]()
 			var nsErrorsToAdd = [NameSpace: ErrorItems]()
-			var validReqItemsNsDict = [NameSpace: [String]]()
+			var validReqItemsNsDict = [NameSpace: [RequestItem]]()
 			// for each request namespace
 			let reqNamespaces = if haveSelectedItems { Array(selectedItems![reqDocIdOrDocType]!.keys)} else {  Array(docReq!.itemsRequest.requestNameSpaces.nameSpaces.keys) }
 			for reqNamespace in reqNamespaces {
-				let reqElementIdentifiers = if haveSelectedItems { Array(selectedItems![reqDocIdOrDocType]![reqNamespace]!)} else { docReq!.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]!.elementIdentifiers }
+				let reqElementIdentifiers = if haveSelectedItems { Array(selectedItems![reqDocIdOrDocType]![reqNamespace]!).map(\.elementIdentifier) } else { docReq!.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]!.elementIdentifiers }
 				guard let items = issuerNs[reqNamespace] else {
 					nsErrorsToAdd[reqNamespace] = Dictionary(grouping: reqElementIdentifiers, by: {$0}).mapValues { _ in 0 }
 					continue
@@ -172,11 +172,11 @@ public class MdocHelpers {
 				var itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
 				if let selectedItems {
 					let selectedNsItems = selectedItems[reqDocIdOrDocType]?[reqNamespace] ?? []
-					itemsToAdd = itemsToAdd.filter({ selectedNsItems.contains($0.elementIdentifier) })
+					itemsToAdd = itemsToAdd.filter({ selectedNsItems.map(\.elementIdentifier).contains($0.elementIdentifier) })
 				}
 				if itemsToAdd.count > 0 {
 					nsItemsToAdd[reqNamespace] = itemsToAdd
-					validReqItemsNsDict[reqNamespace] = itemsToAdd.map(\.elementIdentifier)
+					validReqItemsNsDict[reqNamespace] = itemsToAdd.map { RequestItem(elementIdentifier: $0.elementIdentifier, intentToRetail: docReq?.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]?.dataElements[$0.elementIdentifier] ?? false, isOptional: false) }
 				}
 				let errorItemsSet = itemsReqSet.subtracting(itemsSet)
 				if errorItemsSet.count > 0 {
@@ -203,7 +203,7 @@ public class MdocHelpers {
 			} else {
 				docErrors.append([doc.issuerAuth.mso.docType: UInt64(0)])
 			}
-			errorReqItemsDocDict[doc.issuerAuth.mso.docType] = nsErrorsToAdd.mapValues { Array($0.keys) }
+			errorReqItemsDocDict[doc.issuerAuth.mso.docType] = nsErrorsToAdd.mapValues { $0.keys.map(RequestItem.init) }
 		} // end doc for
 		let documentErrors: [DocumentError]? = docErrors.count == 0 ? nil : docErrors.map(DocumentError.init(docErrors:))
 		let documentsToAdd = docFiltered.count == 0 ? nil : docFiltered

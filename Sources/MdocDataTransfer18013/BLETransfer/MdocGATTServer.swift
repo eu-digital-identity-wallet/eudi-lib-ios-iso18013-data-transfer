@@ -65,7 +65,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	}
 	
 	@objc(CBPeripheralManagerDelegate)
-	class Delegate: NSObject, @preconcurrency CBPeripheralManagerDelegate {
+	class Delegate: NSObject, CBPeripheralManagerDelegate {
 		unowned var server: MdocGattServer
 		
 		init(server: MdocGattServer) {
@@ -267,6 +267,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 				}
 			}
 			catch { errorToSend = error }
+			if let errorToSend { logger.error("Error preparing response: \(errorToSend.localizedDescription)") }
 		}
 	}
 	
