@@ -176,7 +176,7 @@ public class MdocHelpers {
 				}
 				if itemsToAdd.count > 0 {
 					nsItemsToAdd[reqNamespace] = itemsToAdd
-					validReqItemsNsDict[reqNamespace] = itemsToAdd.map { RequestItem(elementIdentifier: $0.elementIdentifier, intentToRetain: docReq?.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]?.dataElements[$0.elementIdentifier] ?? false, isOptional: false) }
+					validReqItemsNsDict[reqNamespace] = itemsToAdd.map { RequestItem(elementIdentifier: $0.elementIdentifier, intentToRetain: docReq?.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]?.dataElements[$0.elementIdentifier], isOptional: nil) }
 				}
 				let errorItemsSet = itemsReqSet.subtracting(itemsSet)
 				if errorItemsSet.count > 0 {
