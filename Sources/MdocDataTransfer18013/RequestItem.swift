@@ -16,18 +16,18 @@ limitations under the License.
 import Foundation
 
 public struct RequestItem: Sendable {
-    public init(elementIdentifier: String, intentToRetail: Bool? = nil, isOptional: Bool? = nil) {
+    public init(elementIdentifier: String, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
         self.elementIdentifier = elementIdentifier
-        self.intentToRetail = intentToRetail
+        self.intentToRetain = intentToRetain
         self.isOptional = isOptional
     }
     public init(elementIdentifier: String) {
         self.elementIdentifier = elementIdentifier
-        self.intentToRetail = nil
+        self.intentToRetain = nil
         self.isOptional = nil
     }
 
     public let elementIdentifier: String
-    public let intentToRetail: Bool?
+    public let intentToRetain: Bool?
     public let isOptional: Bool?
 }
