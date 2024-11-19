@@ -15,19 +15,27 @@ limitations under the License.
 */
 import Foundation
 
+/// A structure representing a request item for data transfer.
+///
+/// Conforms to the `Sendable` protocol to ensure safe concurrent access.
 public struct RequestItem: Sendable {
-    public init(elementIdentifier: String, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
-        self.elementIdentifier = elementIdentifier
-        self.intentToRetain = intentToRetain
-        self.isOptional = isOptional
-    }
-    public init(elementIdentifier: String) {
-        self.elementIdentifier = elementIdentifier
-        self.intentToRetain = nil
-        self.isOptional = nil
-    }
+		public init(elementIdentifier: String, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
+				self.elementIdentifier = elementIdentifier
+				self.intentToRetain = intentToRetain
+				self.isOptional = isOptional
+		}
+		public init(elementIdentifier: String) {
+				self.elementIdentifier = elementIdentifier
+				self.intentToRetain = nil
+				self.isOptional = nil
+		}
 
-    public let elementIdentifier: String
-    public let intentToRetain: Bool?
-    public let isOptional: Bool?
+		/// A unique identifier for the data element.
+		/// This identifier is used to distinguish between different elements within the data transfer process.
+		public let elementIdentifier: String
+		/// Indicates whether the mdoc verifier intends to retain the received data element
+		public let intentToRetain: Bool?
+		/// Indicates whether the data element is optional.
+		/// false or nil value of the property indicates the field is required
+		public let isOptional: Bool?
 }
