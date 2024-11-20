@@ -7,7 +7,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "cf7926fcdf85d1c7fc40a051dea112737b372a5a"
+        "revision" : "48a78884b22d8d1abd0d26138a7712f684c8157c"
       }
     },
     {
@@ -16,7 +16,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-security.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "b91fe696b130aa3bd1ae5f016341f76d4965d0d7"
+        "revision" : "19ac64e98219592bbe6cee64cbb6f3fb4de26d92"
       }
     },
     {
