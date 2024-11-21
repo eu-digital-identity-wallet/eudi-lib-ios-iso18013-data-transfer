@@ -16,9 +16,7 @@ limitations under the License.
 import Foundation
 
 /// A structure representing a request item for data transfer.
-///
-/// Conforms to the `Sendable` protocol to ensure safe concurrent access.
-public struct RequestItem: Sendable {
+public struct RequestItem: Equatable, Sendable {
 		public init(elementIdentifier: String, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
 				self.elementIdentifier = elementIdentifier
 				self.intentToRetain = intentToRetain
