@@ -13,15 +13,13 @@ let package = Package(
             targets: ["MdocDataTransfer18013"]),
     ],
     dependencies: [
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git", exact: "0.3.3"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", exact: "0.2.6"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", exact: "0.3.0"),
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "MdocDataTransfer18013", dependencies: [
-                .product(name: "MdocDataModel18013", package: "eudi-lib-ios-iso18013-data-model"),
 				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security")]),
         .testTarget(
             name: "MdocDataTransfer18013Tests",
