@@ -69,10 +69,8 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 
 /// String keys for the initialization dictionary
 public enum InitializeKeys: String, Sendable {
-	case document_json_data
 	case document_signup_issuer_signed_data
 	case document_signup_issuer_signed_obj
-	case device_private_key_data
 	case device_private_key_obj
 	case trusted_certificates
 	case device_auth_method
