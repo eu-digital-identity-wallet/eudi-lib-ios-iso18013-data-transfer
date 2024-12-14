@@ -52,14 +52,12 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	var subscribeCount: Int = 0
 	var initSuccess:Bool = false
 	
-	public init(parameters: [String: Any]) throws {
-		guard let (docs, devicePrivateKeys, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
-			throw MdocHelpers.makeError(code: .documents_not_provided)
-		}
-		self.docs = docs
-		self.devicePrivateKeys = devicePrivateKeys
-		self.iaca = iaca
-		self.dauthMethod = dauthMethod
+	public init(parameters: InitializeTransferData) throws {
+		let objs = parameters.toInitializeTransferInfo()
+		self.docs = objs.documentObjects.mapValues { IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
+		self.devicePrivateKeys = objs.privateKeyObjects
+		self.iaca = objs.iaca
+		self.dauthMethod = objs.deviceAuthMethod
 		status = .initialized
 		initPeripheralManager()
 		initSuccess = true
