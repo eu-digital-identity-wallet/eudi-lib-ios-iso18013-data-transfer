@@ -67,21 +67,6 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 	}
 }
 
-/// String keys for the initialization dictionary
-public enum InitializeKeys: String, Sendable {
-	case document_signup_issuer_signed_data
-	case document_signup_issuer_signed_obj
-	case device_private_key_obj
-	case trusted_certificates
-	case device_auth_method
-}
 
-/// String keys for the user request dictionary
-public enum UserRequestKeys: String, Sendable {
-	case valid_items_requested
-	case error_items_requested
-	case reader_certificate_issuer
-	case reader_auth_validated
-	case reader_certificate_validation_message
-	case reader_legal_name
-}
+
+

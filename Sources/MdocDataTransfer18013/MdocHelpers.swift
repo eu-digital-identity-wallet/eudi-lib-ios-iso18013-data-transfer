@@ -33,25 +33,6 @@ public typealias RequestItems = [String: [String: [RequestItem]]]
 /// Helper methods
 public class MdocHelpers {
 	
-	public static func initializeData(parameters: [String: Any]) -> (docs: [String: IssuerSigned], devicePrivateKeys: [String: CoseKeyPrivate], iaca: [SecCertificate]?, dauthMethod: DeviceAuthMethod)? {
-		var docs: [String: IssuerSigned]?
-		var devicePrivateKeys: [String: CoseKeyPrivate]?
-		var iaca: [SecCertificate]?
-		var deviceAuthMethod = DeviceAuthMethod.deviceMac
-		if let issObjs = parameters[InitializeKeys.document_signup_issuer_signed_obj.rawValue] as? [String: IssuerSigned], let dpk = parameters[InitializeKeys.device_private_key_obj.rawValue] as? [String: CoseKeyPrivate] {
-			docs = issObjs
-			devicePrivateKeys = dpk
-		}
-		if let i = parameters[InitializeKeys.trusted_certificates.rawValue] as? [Data] {
-			iaca = i.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
-		}
-		if let d = parameters[InitializeKeys.device_auth_method.rawValue] as? String, let dam = DeviceAuthMethod(rawValue: d) {
-			deviceAuthMethod = dam
-		}
-		guard let docs, let devicePrivateKeys else { return nil }
-		return (docs, devicePrivateKeys, iaca, deviceAuthMethod)
-	}
-	
 	static var errorNoDocumentsDescriptionKey: String { "doctype_not_found" }
 	static func getErrorNoDocuments(_ docType: String) -> Error { NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: ["key": Self.errorNoDocumentsDescriptionKey, "%s": docType]) }
 	
@@ -122,7 +103,7 @@ public class MdocHelpers {
 	///   - sessionTranscript: Session Transcript object
 	///   - dauthMethod: Mdoc Authentication method
 	/// - Returns: (Device response object, valid requested items, error request items) tuple
-	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, issuerSigned: [String: IssuerSigned], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKeys: [String: CoseKeyPrivate], sessionTranscript: SessionTranscript? = nil, dauthMethod: DeviceAuthMethod, unlockData: [String: Data]) async throws -> (response: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)? {
+	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, issuerSigned: [String: IssuerSigned], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, devicePrivateKeys: [String: CoseKeyPrivate], sessionTranscript: SessionTranscript? = nil, dauthMethod: DeviceAuthMethod, unlockData: [String: Data]) async throws -> (deviceResponse: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems)? {
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
 		guard deviceRequest != nil || selectedItems != nil else { fatalError("Invalid call") }
