@@ -13,9 +13,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+import Foundation
+import MdocDataModel18013
 
 public struct UserRequestInfo : Sendable {
-	public init(validItemsRequested: RequestItems, errorItemsRequested: RequestItems? = nil, readerAuthValidated: Bool? = nil, readerCertificateIssuer: String? = nil, readerCertificateValidationMessage: String? = nil, readerLegalName: String? = nil) {
+	public init(docDataFormats: [String: DocDataFormat], validItemsRequested: RequestItems, errorItemsRequested: RequestItems? = nil, readerAuthValidated: Bool? = nil, readerCertificateIssuer: String? = nil, readerCertificateValidationMessage: String? = nil, readerLegalName: String? = nil) {
+		self.docDataFormats = docDataFormats
 		self.validItemsRequested = validItemsRequested
 		self.errorItemsRequested = errorItemsRequested
 		self.readerAuthValidated = readerAuthValidated
@@ -23,11 +26,18 @@ public struct UserRequestInfo : Sendable {
 		self.readerCertificateValidationMessage = readerCertificateValidationMessage
 		self.readerLegalName = readerLegalName
 	}
-	
+	/// docType to format map
+	public var docDataFormats: [String: DocDataFormat]
+	/// valid items requested
 	public var validItemsRequested: RequestItems
+	/// error items requested
 	public var errorItemsRequested: RequestItems?
+	/// reader authentication from verifer validated
 	public var readerAuthValidated: Bool?
+	/// reader certificate issuer
 	public var readerCertificateIssuer: String?
+	/// reader certificate validation message
 	public var readerCertificateValidationMessage: String?
+	/// reader legal name
 	public var readerLegalName: String?
 }

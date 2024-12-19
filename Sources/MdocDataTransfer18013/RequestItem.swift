@@ -16,14 +16,17 @@ limitations under the License.
 import Foundation
 
 /// A structure representing a request item for data transfer.
-public struct RequestItem: Equatable, Sendable {
-		public init(elementIdentifier: String, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
+public struct RequestItem: Equatable, Hashable, Sendable {
+		public init(elementIdentifier: String, displayName: String?, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
 				self.elementIdentifier = elementIdentifier
+				self.displayName = displayName
 				self.intentToRetain = intentToRetain
 				self.isOptional = isOptional
 		}
+	
 		public init(elementIdentifier: String) {
 				self.elementIdentifier = elementIdentifier
+				self.displayName = nil
 				self.intentToRetain = nil
 				self.isOptional = nil
 		}
@@ -31,9 +34,20 @@ public struct RequestItem: Equatable, Sendable {
 		/// A unique identifier for the data element.
 		/// This identifier is used to distinguish between different elements within the data transfer process.
 		public let elementIdentifier: String
+	  // display name
+		public let displayName: String?
 		/// Indicates whether the mdoc verifier intends to retain the received data element
 		public let intentToRetain: Bool?
 		/// Indicates whether the data element is optional.
 		/// false or nil value of the property indicates the field is required
 		public let isOptional: Bool?
+
+		//implementation of Equatable and Hashable
+		public static func == (lhs: RequestItem, rhs: RequestItem) -> Bool {
+				return lhs.elementIdentifier == rhs.elementIdentifier
+		}
+
+		public func hash(into hasher: inout Hasher) {
+				hasher.combine(elementIdentifier)
+		}
 }
