@@ -23,25 +23,8 @@ var bleServerTransfer =	MdocGattServer()
 ```	
 
 ## Initialization
-The BLE server needs to be initialized with a dictionary. The parameters are:
-|Key | Value|
-|--- | ---|
-|document_data|Array of documents Base64-serialized as described [here](wiki/SAMPLE_DATA.md) |
-|trusted_certificates|Array of trusted certificates of reader authentication|
-|require_user_accept|True if holder acceptance is required to send the requested data|
-
-```swift
-func initialize() {
-	bleServerTransfer.initialize(parameters: [
-		InitializeKeys.document_data.rawValue: [Data(name: "sample_data")!],
-		InitializeKeys.trusted_certificates.rawValue: [Data(name: "scytales_root_ca", ext: "der")!],
-		InitializeKeys.require_user_accept.rawValue: true
-		]
-	)
-	bleServerTransfer.delegate = this
-}
-```
-The delegate object must be an instance of a class conforming to the ``MdocOfflineDelegate`` protocol
+The BLE server needs to be initialized with an `InitializeTransferData` struct instance. The parameters are:
+The `delegate` property must be an instance of a class conforming to the ``MdocOfflineDelegate`` protocol
 
 ```swift
 public protocol MdocOfflineDelegate: AnyObject {
