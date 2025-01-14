@@ -36,6 +36,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	public var deviceRequest: DeviceRequest?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [String: IssuerSigned]!
+	public var docDisplayNames: [String: [String: [String: String]]?]!
 	public var iaca: [SecCertificate]!
 	public var devicePrivateKeys: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
@@ -52,14 +53,13 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	var subscribeCount: Int = 0
 	var initSuccess:Bool = false
 	
-	public init(parameters: [String: Any]) throws {
-		guard let (docs, devicePrivateKeys, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
-			throw MdocHelpers.makeError(code: .documents_not_provided)
-		}
-		self.docs = docs
-		self.devicePrivateKeys = devicePrivateKeys
-		self.iaca = iaca
-		self.dauthMethod = dauthMethod
+	public init(parameters: InitializeTransferData) throws {
+		let objs = parameters.toInitializeTransferInfo()
+		self.docs = objs.documentObjects.mapValues { IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
+		docDisplayNames = objs.docDisplayNames
+		self.devicePrivateKeys = objs.privateKeyObjects
+		self.iaca = objs.iaca
+		self.dauthMethod = objs.deviceAuthMethod
 		status = .initialized
 		initPeripheralManager()
 		initSuccess = true
@@ -219,7 +219,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		delegate?.didChangeStatus(newValue)
 		if newValue == .requestReceived {
 			peripheralManager.stopAdvertising()
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, iaca: iaca, requestData: readBuffer, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docDisplayNames: docDisplayNames, iaca: iaca, requestData: readBuffer, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
 			switch decodedRes {
 			case .success(let decoded):
 				self.deviceRequest = decoded.deviceRequest
@@ -263,7 +263,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData) else {
+				guard let (drToSend, _, _) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docDisplayNames: docDisplayNames, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData) else {
 					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return
 				}
 				guard let dts = drToSend.documents, !dts.isEmpty else { errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return  }
