@@ -168,20 +168,17 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	}
 	
 	func start() {
-		guard !isPreview && !isInErrorState else { 
+		guard !isPreview && !isInErrorState else {
 			logger.info("Current status is \(status)")
 			return
 		}
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil
-			// get the BLE UUID from the device engagement and truncate it to the first 4 characters (short UUID)
-			guard var uuid = deviceEngagement!.ble_uuid else {
+			guard let uuid = deviceEngagement?.ble_uuid else {
 				logger.error("BLE initialization error")
 				return
 			}
-			let index = uuid.index(uuid.startIndex, offsetBy: 4)
-			uuid = String(uuid[index...].prefix(4)).uppercased()
 			buildServices(uuid: uuid)
 			let advertisementData: [String: Any] = [ CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: uuid)], CBAdvertisementDataLocalNameKey: uuid ]
 			// advertise the peripheral with the short UUID
