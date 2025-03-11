@@ -24,6 +24,10 @@ public struct RequestItem: Equatable, Hashable, Sendable {
 		self.isOptional = isOptional
 	}
 
+	public var rootIdentifier: String { elementPath.first! }
+
+	public var rootDisplayName: String? { displayNames.first! }
+
 	/// A unique identifier for the data element.
 	/// This element path is used to distinguish between different elements within the data transfer process.
 	public let elementPath: [String]
