@@ -17,10 +17,9 @@ import Foundation
 import MdocDataModel18013
 
 public struct UserRequestInfo : Sendable {
-	public init(docDataFormats: [String: DocDataFormat], validItemsRequested: RequestItems, errorItemsRequested: RequestItems? = nil, readerAuthValidated: Bool? = nil, readerCertificateIssuer: String? = nil, readerCertificateValidationMessage: String? = nil, readerLegalName: String? = nil) {
+	public init(docDataFormats: [String: DocDataFormat], itemsRequested: RequestItems, readerAuthValidated: Bool? = nil, readerCertificateIssuer: String? = nil, readerCertificateValidationMessage: String? = nil, readerLegalName: String? = nil) {
 		self.docDataFormats = docDataFormats
-		self.validItemsRequested = validItemsRequested
-		self.errorItemsRequested = errorItemsRequested
+		self.itemsRequested = itemsRequested
 		self.readerAuthValidated = readerAuthValidated
 		self.readerCertificateIssuer = readerCertificateIssuer
 		self.readerCertificateValidationMessage = readerCertificateValidationMessage
@@ -28,10 +27,8 @@ public struct UserRequestInfo : Sendable {
 	}
 	/// docType to format map
 	public var docDataFormats: [String: DocDataFormat]
-	/// valid items requested
-	public var validItemsRequested: RequestItems
-	/// error items requested
-	public var errorItemsRequested: RequestItems?
+	/// items requested
+	public var itemsRequested: RequestItems
 	/// reader authentication from verifer validated
 	public var readerAuthValidated: Bool?
 	/// reader certificate issuer

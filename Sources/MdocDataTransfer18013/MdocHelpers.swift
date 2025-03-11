@@ -32,16 +32,16 @@ public typealias RequestItems = [String: [NameSpace: [RequestItem]]]
 
 /// Helper methods
 public class MdocHelpers {
-	
+
 	static var errorNoDocumentsDescriptionKey: String { "doctype_not_found" }
 	static func getErrorNoDocuments(_ docType: String) -> Error { NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: ["key": Self.errorNoDocumentsDescriptionKey, "%s": docType]) }
-	
+
 	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
 		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
 		logger.error(Logger.Message(unicodeScalarLiteral: errorMessage))
 		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage, "key": code.description])
 	}
-	
+
 	public static func getSessionDataToSend(sessionEncryption: SessionEncryption?, status: TransferStatus, docToSend: DeviceResponse) async -> Result<Data, Error> {
 		do {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return .failure(Self.makeError(code: .sessionEncryptionNotInitialized)) }
@@ -53,7 +53,7 @@ public class MdocHelpers {
 			return .success(Data(sd.encode(options: CBOROptions())))
 		} catch { return .failure(error) }
 	}
-	
+
 	/// Decrypt the contents of a data object and return a ``DeviceRequest`` object if the data represents a valid device request. If the data does not represent a valid device request, the function returns nil.
 	/// - Parameters:
 	///   - deviceEngagement: deviceEngagement
@@ -77,9 +77,9 @@ public class MdocHelpers {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return .failure(Self.makeError(code: .sessionEncryptionNotInitialized)) }
 			guard let requestData = try await sessionEncryption.decrypt(requestCipherData) else { logger.error("Request data cannot be decrypted"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return .failure(Self.makeError(code: .requestDecodeError)) }
-			guard let (drTest, validRequestItems, errorRequestItems) = try await Self.getDeviceResponseToSend(deviceRequest: deviceRequest, issuerSigned: docs, docDisplayNames: docDisplayNames, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData) else { logger.error("Valid request items nil"); return .failure(Self.makeError(code: .requestDecodeError)) }
+			guard let (drTest, validRequestItems, _) = try await Self.getDeviceResponseToSend(deviceRequest: deviceRequest, issuerSigned: docs, docDisplayNames: docDisplayNames, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData) else { logger.error("Valid request items nil"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			let bInvalidReq = (drTest.documents == nil)
-			var userRequestInfo = UserRequestInfo(docDataFormats: docs.mapValues { _ in .cbor }, validItemsRequested: validRequestItems, errorItemsRequested: errorRequestItems)
+			var userRequestInfo = UserRequestInfo(docDataFormats: docs.mapValues { _ in .cbor }, itemsRequested: validRequestItems)
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
 				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, case let certData = docR.readerCertificates, certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthX5c: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
@@ -91,7 +91,7 @@ public class MdocHelpers {
 			return .success((sessionEncryption: sessionEncryption, deviceRequest: deviceRequest, userRequestInfo: userRequestInfo, isValidRequest: !bInvalidReq))
 		} catch { return .failure(error) }
 	}
-	
+
 	/// Construct ``DeviceResponse`` object to present from wallet data and input device request
 	/// - Parameters:
 	///   - deviceRequest: Device request coming from verifier
@@ -185,12 +185,12 @@ public class MdocHelpers {
 		let deviceResponseToSend = DeviceResponse(version: DeviceResponse.defaultVersion, documents: documentsToAdd, documentErrors: documentErrors, status: 0)
 		return (deviceResponseToSend, validReqItemsDocDict, errorReqItemsDocDict)
 	}
-	
+
 	/// Returns the number of blocks that dataLength bytes of data can be split into, given a maximum block size of maxBlockSize bytes.
 	/// - Parameters:
 	///   - dataLength: Length of data to be split
 	///   - maxBlockSize: The maximum block size
-	/// - Returns: Number of blocks 
+	/// - Returns: Number of blocks
 	public static func CountNumBlocks(dataLength: Int, maxBlockSize: Int) -> Int {
 		let blockSize = maxBlockSize
 		var numBlocks = 0
@@ -204,7 +204,7 @@ public class MdocHelpers {
 		}
 		return numBlocks
 	}
-	
+
 	/// Creates a block for a given block id from a data object. The block size is limited to maxBlockSize bytes.
 	/// - Parameters:
 	///   - data: The data object to be sent
@@ -222,9 +222,9 @@ public class MdocHelpers {
 		let chunk = data.subdata(in: start..<end)
 		return (chunk,bEnd)
 	}
-	
+
 	#if os(iOS)
-	
+
 	/// Check if BLE access is allowed, and if not, present a dialog that opens settings
 	/// - Parameters:
 	///   - vc: The view controller that will present the settings
@@ -246,7 +246,7 @@ public class MdocHelpers {
 			logger.info("Unknown authorization status")
 		}
 	}
-	
+
 	/// Check if the user has given permission to access the camera. If not, ask them to go to the settings app to give permission.
 	/// - Parameters:
 	///   - vc:  The view controller that will present the settings
@@ -274,7 +274,7 @@ public class MdocHelpers {
 			logger.info("Unknown authorization status")
 		}
 	}
-	
+
 	/// Present an alert controller with a message, and two actions, one to cancel, and one to go to the settings page.
 	/// - Parameters:
 	///   - vc: The view controller that will present the settings
@@ -292,7 +292,7 @@ public class MdocHelpers {
 		})
 		vc.present(alertController, animated: true)
 	}
-	
+
 	/// Finds the top view controller in the view hierarchy of the app. It is used to present a new view controller on top of any existing view controllers.
 	@MainActor
 	public static func getTopViewController(base: UIViewController? = UIApplication.shared.windows.first { $0.isKeyWindow }?.rootViewController) -> UIViewController? {
@@ -305,7 +305,7 @@ public class MdocHelpers {
 		}
 		return base
 	}
-	
+
 	#endif
 
 	/// Get the common name (CN) from the certificate distringuished name (DN)
