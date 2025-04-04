@@ -12,7 +12,7 @@ public struct InitializeTransferData: Sendable {
         self.trustedCertificates = trustedCertificates
         self.deviceAuthMethod = deviceAuthMethod
         self.idsToDocTypes = idsToDocTypes
-				self.hashingAlgs = hashingAlgs
+		self.hashingAlgs = hashingAlgs
     }
 
     public let dataFormats: [String: String]
