@@ -42,7 +42,14 @@ public class MdocHelpers {
 		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: errorMessage, "key": code.description])
 	}
 
-	public static func getSessionDataToSend(sessionEncryption: SessionEncryption?, status: TransferStatus, docToSend: DeviceResponse) async -> Result<Data, Error> {
+	/// Get the session data to send to the reader. The session data is encrypted using the session encryption object
+	/// - Parameters:
+	///   - sessionEncryption: Instance of session encryption object
+	///   - status: Transfer status
+	///   - docToSend: Device response object to send
+	///
+	/// - Returns: A tuple containing the encrypted session data and the clear text data to send.
+	public static func getSessionDataToSend(sessionEncryption: SessionEncryption?, status: TransferStatus, docToSend: DeviceResponse) async -> Result<(Data, Data), Error> {
 		do {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return .failure(Self.makeError(code: .sessionEncryptionNotInitialized)) }
 			if docToSend.documents == nil { logger.error("Could not create documents to send") }
@@ -50,7 +57,7 @@ public class MdocHelpers {
 			let clearBytesToSend = cborToSend.encode()
 			let cipherData = try await sessionEncryption.encrypt(clearBytesToSend)
 			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 11 : 20)
-			return .success(Data(sd.encode(options: CBOROptions())))
+			return .success((Data(sd.encode(options: CBOROptions())), Data(clearBytesToSend)))
 		} catch { return .failure(error) }
 	}
 
@@ -58,13 +65,14 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - deviceEngagement: deviceEngagement
 	///   - docs: IssuerSigned documents
+	///   - docMetadata: Document metadata
 	///   - iaca: Root certificates trusted
 	///   - devicePrivateKeys: Device private keys
 	///   - dauthMethod: Method to perform mdoc authentication
 	///   - handOver: handOver structure
 	/// - Returns: A ``DeviceRequest`` object
 
-	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [String: IssuerSigned], docDisplayNames: [String: [String: [String: String]]?], iaca: [SecCertificate], requestData: Data, devicePrivateKeys: [String: CoseKeyPrivate], dauthMethod: DeviceAuthMethod, unlockData: [String: Data], readerKeyRawData: [UInt8]?, handOver: CBOR) async -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo, isValidRequest: Bool), Error> {
+	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [String: IssuerSigned], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], iaca: [SecCertificate], requestData: Data, devicePrivateKeys: [String: CoseKeyPrivate], dauthMethod: DeviceAuthMethod, unlockData: [String: Data], readerKeyRawData: [UInt8]?, handOver: CBOR) async -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo, isValidRequest: Bool), Error> {
 		do {
 			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			guard var se = SessionEstablishment(cbor: seCbor) else { logger.error("Request Data cannot be decoded to session establisment"); return .failure(Self.makeError(code: .requestDecodeError)) }
@@ -79,7 +87,8 @@ public class MdocHelpers {
 			guard let deviceRequest = DeviceRequest(data: requestData) else { logger.error("Decrypted data cannot be decoded"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			guard let (drTest, validRequestItems, _) = try await Self.getDeviceResponseToSend(deviceRequest: deviceRequest, issuerSigned: docs, docDisplayNames: docDisplayNames, selectedItems: nil, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption.sessionKeys.publicKey, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod, unlockData: unlockData) else { logger.error("Valid request items nil"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			let bInvalidReq = (drTest.documents == nil)
-			var userRequestInfo = UserRequestInfo(docDataFormats: docs.mapValues { _ in .cbor }, itemsRequested: validRequestItems, deviceRequestBytes: Data(requestData))
+			let docMetadataToSend = docMetadata.filter { (key: String, value: Data?) in validRequestItems.keys.contains(key) && value != nil }.compactMapValues { $0 }
+			var userRequestInfo = UserRequestInfo(docDataFormats: docs.mapValues { _ in .cbor }, itemsRequested: validRequestItems, docMetadata: docMetadataToSend, deviceRequestBytes: Data(requestData))
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.transcript)
 				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, case let certData = docR.readerCertificates, certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthX5c: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
