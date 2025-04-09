@@ -17,13 +17,16 @@ import Foundation
 import MdocDataModel18013
 
 public struct UserRequestInfo : Sendable {
-	public init(docDataFormats: [String: DocDataFormat], itemsRequested: RequestItems, readerAuthValidated: Bool? = nil, readerCertificateIssuer: String? = nil, readerCertificateValidationMessage: String? = nil, readerLegalName: String? = nil) {
+	public init(docDataFormats: [String: DocDataFormat], itemsRequested: RequestItems, deviceRequestBytes: Data? = nil, readerAuthBytes: Data? = nil, certificateChain: [Data]? = nil, readerAuthValidated: Bool? = nil, readerCertificateIssuer: String? = nil, readerCertificateValidationMessage: String? = nil, readerLegalName: String? = nil) {
 		self.docDataFormats = docDataFormats
 		self.itemsRequested = itemsRequested
 		self.readerAuthValidated = readerAuthValidated
 		self.readerCertificateIssuer = readerCertificateIssuer
 		self.readerCertificateValidationMessage = readerCertificateValidationMessage
 		self.readerLegalName = readerLegalName
+		self.deviceRequestBytes = deviceRequestBytes
+        self.readerAuthBytes = readerAuthBytes
+		self.certificateChain = certificateChain
 	}
 	/// docType to format map
 	public var docDataFormats: [String: DocDataFormat]
@@ -31,10 +34,16 @@ public struct UserRequestInfo : Sendable {
 	public var itemsRequested: RequestItems
 	/// reader authentication from verifer validated
 	public var readerAuthValidated: Bool?
-	/// reader certificate issuer
+	/// reader certificate issuer (issuer common name)
 	public var readerCertificateIssuer: String?
 	/// reader certificate validation message
 	public var readerCertificateValidationMessage: String?
 	/// reader legal name
 	public var readerLegalName: String?
+	/// device request bytes (encoded cbor)
+	public var deviceRequestBytes: Data?
+	/// reader authentication bytes (encoded cbor)
+	public var readerAuthBytes: Data?
+ 	/// certificate chain (base64 pem encoded)
+	public var certificateChain: [Data]?
 }
