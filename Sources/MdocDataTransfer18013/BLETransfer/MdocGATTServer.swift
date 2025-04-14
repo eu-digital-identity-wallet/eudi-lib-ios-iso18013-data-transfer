@@ -150,7 +150,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = MdocHelpers.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, rfus: rfus)
 		try await deviceEngagement!.makePrivateKey(crv: crv, secureArea: secureArea)
-		try await Task.sleep(nanoseconds: 300_000_000) // wait for 0.3 seconds to allow the BLE stack to be ready
+		try await Task.sleep(nanoseconds: 500_000_000) // wait for 0.5 seconds to allow the BLE stack to be ready
 		sessionEncryption = nil
 #if os(iOS)
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
