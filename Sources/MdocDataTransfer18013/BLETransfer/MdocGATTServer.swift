@@ -44,6 +44,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	public var readerName: String?
 	public var qrCodePayload: String?
 	public weak var delegate: (any MdocOfflineDelegate)?
+	var continuationQrCodeReady: CheckedContinuation<Void, Error>?
 	public var advertising: Bool = false
 	public var error: Error? = nil  { willSet { handleErrorSet(newValue) }}
 	public var status: TransferStatus = .initializing { willSet { Task { @MainActor in await handleStatusChange(newValue) } } }
@@ -85,7 +86,9 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
 			logger.info("CBPeripheralManager didUpdateState:")
 			logger.info(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")
-			if peripheral.state == .poweredOn, server.qrCodePayload != nil { server.start() }
+			if peripheral.state == .poweredOn, server.qrCodePayload != nil {
+				server.continuationQrCodeReady?.resume(); server.continuationQrCodeReady = nil
+			}
 		}
 
 		func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
@@ -150,17 +153,17 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		guard status == .initialized || status == .disconnected || status == .responseSent else { error = MdocHelpers.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
 		deviceEngagement = DeviceEngagement(isBleServer: true, rfus: rfus)
 		try await deviceEngagement!.makePrivateKey(crv: crv, secureArea: secureArea)
-		try await Task.sleep(nanoseconds: 500_000_000) // wait for 0.5 seconds to allow the BLE stack to be ready
 		sessionEncryption = nil
 #if os(iOS)
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
+		guard peripheralManager.state != .unauthorized else { error = MdocHelpers.makeError(code: .bleNotAuthorized); return }
+		if !isBlePoweredOn { try await withCheckedThrowingContinuation { c in continuationQrCodeReady = c } } // ensure that BLE is powered on before proceeding
 		logger.info("Created qrCode payload: \(qrCodePayload!)")
 #endif
 		// todo: issuerNameSpaces is not mandatory according to specs, need to change
 		guard docs.values.allSatisfy({ $0.issuerNameSpaces != nil }) else { error = MdocHelpers.makeError(code: .invalidInputDocument); return }
 		// Check that the peripheral manager has been authorized to use Bluetooth.
-		guard peripheralManager.state != .unauthorized else { error = MdocHelpers.makeError(code: .bleNotAuthorized); return }
-		start()
+		startBleAdvertising()
 	}
 
 	func buildServices(uuid: String) {
@@ -173,7 +176,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		peripheralManager.add(bleUserService)
 	}
 
-	func start() {
+	func startBleAdvertising() {
 		guard !isPreview && !isInErrorState else {
 			logger.info("Current status is \(status)")
 			return
@@ -193,7 +196,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 			status = .qrEngagementReady
 		} else {
 			// once bt is powered on, advertise
-			if peripheralManager.state == .resetting { DispatchQueue.main.asyncAfter(deadline: .now()+1) { self.start()} }
+			if peripheralManager.state == .resetting { DispatchQueue.main.asyncAfter(deadline: .now()+1) { self.startBleAdvertising()} }
 			else { logger.info("Peripheral manager powered off") }
 		}
 	}
