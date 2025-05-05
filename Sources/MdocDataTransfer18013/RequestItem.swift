@@ -17,16 +17,13 @@ import Foundation
 
 /// A structure representing a request item for data transfer.
 public struct RequestItem: Equatable, Hashable, Sendable {
-	public init(elementPath: [String], displayNames: [String?], intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
+	public init(elementPath: [String], intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
 		self.elementPath = elementPath
-		self.displayNames = displayNames
 		self.intentToRetain = intentToRetain
 		self.isOptional = isOptional
 	}
 
 	public var rootIdentifier: String { elementPath.first! }
-
-	public var rootDisplayName: String? { displayNames.first! }
 
 	/// A unique identifier for the data element.
 	/// This element path is used to distinguish between different elements within the data transfer process.
@@ -36,8 +33,6 @@ public struct RequestItem: Equatable, Hashable, Sendable {
 	public var elementIdentifier: String {
 		elementPath.joined(separator: ".")
 	}
-	/// display names of the component paths (currently only the root display name is not-nil)
-	public let displayNames: [String?]
 
 	/// Indicates whether the mdoc verifier intends to retain the received data element
 	public let intentToRetain: Bool?
@@ -57,16 +52,16 @@ public struct RequestItem: Equatable, Hashable, Sendable {
 
 extension RequestItem {
 	public init(elementPath: [String]) {
-		self.init(elementPath: elementPath, displayNames: Array(repeating: nil, count: elementPath.count), intentToRetain: nil, isOptional: nil)
+		self.init(elementPath: elementPath, intentToRetain: nil, isOptional: nil)
 	}
 
 	public init(elementIdentifier: String) {
 		let elementPath = elementIdentifier.components(separatedBy: ".")
-		self.init(elementPath: elementPath, displayNames: Array(repeating: nil, count: elementPath.count), intentToRetain: nil, isOptional: nil)
+		self.init(elementPath: elementPath, intentToRetain: nil, isOptional: nil)
 	}
 
-	public init(elementIdentifier: String, displayName: String?, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
-		self.init(elementPath: elementIdentifier.components(separatedBy: "."), displayNames: [displayName], intentToRetain: intentToRetain, isOptional: isOptional)
+	public init(elementIdentifier: String, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
+		self.init(elementPath: elementIdentifier.components(separatedBy: "."), intentToRetain: intentToRetain, isOptional: isOptional)
 	}
 
 }
