@@ -1,30 +1,35 @@
 import Foundation
 import MdocDataModel18013
 import MdocSecurity18013
+import WalletStorage
 
 public struct InitializeTransferData: Sendable {
 
-	public init(dataFormats: [String : String], documentData: [String : Data], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], privateKeyData: [String : String], trustedCertificates: [Data], deviceAuthMethod: String, idsToDocTypes: [String : String], hashingAlgs: [String: String]) {
+	public init(documents: [WalletStorage.Document], dataFormats: [String: String], documentData: [String: Data], documentKeyIndexes: [String: Int], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], docKeyInfos: [String: Data?], trustedCertificates: [Data], deviceAuthMethod: String, idsToDocTypes: [String: String], hashingAlgs: [String: String]) {
+		self.documents = documents
         self.dataFormats = dataFormats
         self.documentData = documentData
+		self.documentKeyIndexes = documentKeyIndexes
 		self.docMetadata = docMetadata
 		self.docDisplayNames = docDisplayNames
-        self.privateKeyData = privateKeyData
+        self.docKeyInfos = docKeyInfos
         self.trustedCertificates = trustedCertificates
         self.deviceAuthMethod = deviceAuthMethod
         self.idsToDocTypes = idsToDocTypes
 		self.hashingAlgs = hashingAlgs
     }
-
+	public let documents: [WalletStorage.Document]
     public let dataFormats: [String: String]
     /// doc-id to document data
     public let documentData: [String: Data]
+	/// doc-id to document key indexes
+	public let documentKeyIndexes: [String: Int]
 	/// document-id to doc-metadata map
 	public let docMetadata: [String: Data?]
 	/// document-id to doc.fields display names
 	public let docDisplayNames: [String: [String: [String: String]]?]
-    /// doc-id to private key secure area name
-    public let privateKeyData: [String: String]
+    /// doc-id to private key info
+    public let docKeyInfos: [String: Data?]
     /// trusted certificates
     public let trustedCertificates: [Data]
     /// device auth method
@@ -36,10 +41,14 @@ public struct InitializeTransferData: Sendable {
 
     public func toInitializeTransferInfo() -> InitializeTransferInfo {
         // filter data and private keys by format
-        let documentObjects = documentData
+		let privateKeyObjects: [String: CoseKeyPrivate] = Dictionary(uniqueKeysWithValues: docKeyInfos.compactMap {
+			guard let dki = DocKeyInfo(from: $0.value)  else { return nil }
+			guard let keyIndex = documentKeyIndexes[$0.key] else { return nil }
+			return ($0.key, CoseKeyPrivate(privateKeyId: $0.key, index: keyIndex, secureArea: SecureAreaRegistry.shared.get(name: dki.secureAreaName)))
+		})
+		let documentObjects = documentData
 		let docMetadata = docMetadata.compactMapValues { DocMetadata(from: $0) }
-        let dataFormats = Dictionary.init(uniqueKeysWithValues: dataFormats.map { k,v in (k, DocDataFormat(rawValue: v)) }).compactMapValues { $0 }
-        let privateKeyObjects = Dictionary.init(uniqueKeysWithValues: privateKeyData.map { k,v in (k, CoseKeyPrivate(privateKeyId: k, secureArea: SecureAreaRegistry.shared.get(name: v))) })
+		let dataFormats = Dictionary(uniqueKeysWithValues: dataFormats.map { k,v in (k, DocDataFormat(rawValue: v)) }).compactMapValues { $0 }
         let iaca = trustedCertificates.map { SecCertificateCreateWithData(nil, $0 as CFData)! }
         let deviceAuthMethod = DeviceAuthMethod(rawValue: deviceAuthMethod) ?? .deviceMac
 		return InitializeTransferInfo(dataFormats: dataFormats, documentObjects: documentObjects, docMetadata: docMetadata, docDisplayNames: docDisplayNames, privateKeyObjects: privateKeyObjects, iaca: iaca, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: hashingAlgs)
