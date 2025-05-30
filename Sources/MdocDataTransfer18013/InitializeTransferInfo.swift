@@ -1,12 +1,10 @@
 import Foundation
 import MdocDataModel18013
 import MdocSecurity18013
-import WalletStorage
 
 public struct InitializeTransferData: Sendable {
 
-	public init(documents: [WalletStorage.Document], dataFormats: [String: String], documentData: [String: Data], documentKeyIndexes: [String: Int], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], docKeyInfos: [String: Data?], trustedCertificates: [Data], deviceAuthMethod: String, idsToDocTypes: [String: String], hashingAlgs: [String: String]) {
-		self.documents = documents
+	public init(dataFormats: [String: String], documentData: [String: Data], documentKeyIndexes: [String: Int], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], docKeyInfos: [String: Data?], trustedCertificates: [Data], deviceAuthMethod: String, idsToDocTypes: [String: String], hashingAlgs: [String: String]) {
         self.dataFormats = dataFormats
         self.documentData = documentData
 		self.documentKeyIndexes = documentKeyIndexes
@@ -18,7 +16,6 @@ public struct InitializeTransferData: Sendable {
         self.idsToDocTypes = idsToDocTypes
 		self.hashingAlgs = hashingAlgs
     }
-	public let documents: [WalletStorage.Document]
     public let dataFormats: [String: String]
     /// doc-id to document data
     public let documentData: [String: Data]
