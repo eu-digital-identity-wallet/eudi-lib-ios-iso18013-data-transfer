@@ -205,7 +205,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		qrCodePayload = nil
 		advertising = false
 		subscribeCount = 0
-		if let pk = deviceEngagement?.privateKey { Task { @MainActor in try? await pk.secureArea.deleteKeyBatch(id: pk.privateKeyId, batchSize: 1); deviceEngagement?.privateKey = nil } }
+		if let pk = deviceEngagement?.privateKey { Task { @MainActor in try? await pk.secureArea.deleteKeyBatch(id: pk.privateKeyId, startIndex: 0, batchSize: 1); deviceEngagement?.privateKey = nil } }
 		if status == .error && initSuccess { status = .initializing }
 	}
 

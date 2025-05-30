@@ -52,7 +52,7 @@ public class MdocHelpers {
 	public static func getSessionDataToSend(sessionEncryption: SessionEncryption?, status: TransferStatus, docToSend: DeviceResponse) async -> Result<(Data, Data), Error> {
 		do {
 			guard var sessionEncryption else { logger.error("Session Encryption not initialized"); return .failure(Self.makeError(code: .sessionEncryptionNotInitialized)) }
-			if docToSend.documents == nil { logger.error("Could not create documents to send") }
+			if docToSend.documents == nil, status != .error { logger.error("Could not create documents to send") }
 			let cborToSend = docToSend.toCBOR(options: CBOROptions())
 			let clearBytesToSend = cborToSend.encode()
 			let cipherData = try await sessionEncryption.encrypt(clearBytesToSend)
