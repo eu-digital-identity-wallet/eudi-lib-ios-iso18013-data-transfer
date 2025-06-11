@@ -1,13 +1,13 @@
 {
-  "originHash" : "6c6d565638a890ee0280569f72d327dab2373adb58e64959e9c59f8993f3d505",
+  "originHash" : "95ac47c3ccc5525f851dd7a270666190baa58e9031b759bf68eb95ff572e2e56",
   "pins" : [
     {
       "identity" : "eudi-lib-ios-iso18013-data-model",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "22334a56b62509dfb1037c6152df9cc6b17dc261",
-        "version" : "0.6.3"
+        "revision" : "bee99f82bfdd366ce24cb02d0cf9068f548cb784",
+        "version" : "0.7.0"
       }
     },
     {
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "5eb0ddde311bbe10008829aea468fa8e53b18342",
-        "version" : "0.5.2"
+        "revision" : "d9affdcb5c9e50ba731b8bf51208aa11edb01835",
+        "version" : "0.6.0"
       }
     },
     {
