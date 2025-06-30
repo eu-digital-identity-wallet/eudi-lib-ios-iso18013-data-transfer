@@ -232,6 +232,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 					delegate?.didReceiveRequest(decoded.userRequestInfo, handleSelected: userSelected)
 				} else {
 					await userSelected(false, nil)
+					delegate?.didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."]))
 				}
 			case .failure(let err):
 				error = err
