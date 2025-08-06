@@ -113,7 +113,7 @@ public class MdocHelpers {
 	///   - sessionTranscript: Session Transcript object
 	///   - dauthMethod: Mdoc Authentication method
 	/// - Returns: (Device response object, valid requested items, error request items) tuple
-	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, issuerSigned: [String: IssuerSigned], docMetadata: [String: Data], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, privateKeyObjects: [String: CoseKeyPrivate], sessionTranscript: SessionTranscript? = nil, dauthMethod: DeviceAuthMethod, unlockData: [String: Data]) async throws -> (deviceResponse: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems, responseMetadata: [Data?])? {
+	public static func getDeviceResponseToSend(deviceRequest: DeviceRequest?, issuerSigned: [String: IssuerSigned], docMetadata: [String: Data], selectedItems: RequestItems? = nil, sessionEncryption: SessionEncryption? = nil, eReaderKey: CoseKey? = nil, privateKeyObjects: [String: CoseKeyPrivate], sessionTranscript: (CBOREncodable & Sendable)? = nil, dauthMethod: DeviceAuthMethod, unlockData: [String: Data]) async throws -> (deviceResponse: DeviceResponse, validRequestItems: RequestItems, errorRequestItems: RequestItems, responseMetadata: [Data?])? {
 		var docFiltered = [Document](); var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems(); var resMetadata = [Data?]()
 		guard deviceRequest != nil || selectedItems != nil else { fatalError("Invalid call") }
@@ -177,7 +177,7 @@ public class MdocHelpers {
 				let sessionTranscript = sessionEncryption?.transcript ?? sessionTranscript
 				if let eReaderKey, let sessionTranscript, let privateKeyObject {
 					let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: privateKeyObject)
-					let mdocAuth = MdocAuthentication(transcript: sessionTranscript, authKeys: authKeys)
+					let mdocAuth = MdocAuthentication(sessionTranscript: sessionTranscript, authKeys: authKeys)
 					guard let devAuth = try await mdocAuth.getDeviceAuthForTransfer(docType: doc.issuerAuth.mso.docType, dauthMethod: dauthMethod, unlockData: unlockData[reqDocIdOrDocType]) else {
 						logger.error("Cannot create device auth"); return nil
 					}
