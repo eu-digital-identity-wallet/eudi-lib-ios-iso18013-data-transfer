@@ -59,7 +59,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 
 	public init(parameters: InitializeTransferData) throws {
 		let objs = parameters.toInitializeTransferInfo()
-		self.docs = objs.documentObjects.mapValues { IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
+		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
 		self.privateKeyObjects = objs.privateKeyObjects
 		self.iaca = objs.iaca
