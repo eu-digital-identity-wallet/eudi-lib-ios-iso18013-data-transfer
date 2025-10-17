@@ -45,8 +45,18 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	public weak var delegate: (any MdocOfflineDelegate)?
 	var continuationQrCodeReady: CheckedContinuation<Void, Error>?
 	public var advertising: Bool = false
-	public var error: Error? = nil  { willSet { handleErrorSet(newValue) }}
-	public var status: TransferStatus = .initializing { willSet { Task { @MainActor in await handleStatusChange(newValue) } } }
+	public var error: Error? = nil {
+		willSet {
+			handleErrorSet(newValue)
+		}
+	}
+	public var status: TransferStatus = .initializing {
+		willSet {
+			Task { @MainActor in
+				await handleStatusChange(newValue)
+			}
+		}
+	}
 	public var unlockData: [String: Data]!
 	public var deviceResponseBytes: Data?
 	/// response metadata array
@@ -78,14 +88,17 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		}
 
 		func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-			if server.sendBuffer.count > 0 { self.server.sendDataWithUpdates() }
+			if server.sendBuffer.count > 0 {
+				self.server.sendDataWithUpdates()
+			}
 		}
 
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
 			logger.info("CBPeripheralManager didUpdateState:")
 			logger.info(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")
 			if peripheral.state == .poweredOn, server.qrCodePayload != nil {
-				server.continuationQrCodeReady?.resume(); server.continuationQrCodeReady = nil
+				server.continuationQrCodeReady?.resume()
+				server.continuationQrCodeReady = nil
 			}
 		}
 
@@ -95,8 +108,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 					logger.info("Start request received to state characteristic") // --> start
 					server.status = .started
 					server.readBuffer.removeAll()
-				}
-				else if h == BleTransferMode.END_REQUEST.first! {
+				} else if h == BleTransferMode.END_REQUEST.first! {
 					guard server.status == .responseSent else {
 						logger.error("State END command rejected. Not in responseSent state")
 						peripheral.respond(to: requests[0], withResult: .unlikelyError)
@@ -107,24 +119,38 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
 				for r in requests {
-					guard let data = r.value, let h = data.first else { continue }
+					guard let data = r.value, let h = data.first else {
+						continue
+					}
 					let bStart = h == BleTransferMode.START_DATA.first!
 					let bEnd = (h == BleTransferMode.END_DATA.first!)
-					if data.count > 1 { server.readBuffer.append(data.advanced(by: 1)) }
-					if !bStart && !bEnd { logger.warning("Not a valid request block: \(data)") }
-					if bEnd { server.status = .requestReceived  }
+					if data.count > 1 {
+						server.readBuffer.append(data.advanced(by: 1))
+					}
+					if !bStart && !bEnd {
+						logger.warning("Not a valid request block: \(data)")
+					}
+					if bEnd {
+						server.status = .requestReceived
+					}
 				}
 			}
 			peripheral.respond(to: requests[0], withResult: .success)
 		}
 
 		public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
-			guard server.status == .qrEngagementReady else { return }
+			guard server.status == .qrEngagementReady else {
+				return
+			}
 			let mdocCbc = MdocServiceCharacteristic(uuid: characteristic.uuid)
 			logger.info("Remote central \(central.identifier) connected for \(mdocCbc?.rawValue ?? "") characteristic")
 			server.remoteCentral = central
-			if characteristic.uuid == MdocServiceCharacteristic.state.uuid || characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid { server.subscribeCount += 1 }
-			if server.subscribeCount > 1 { server.status = .connected }
+			if characteristic.uuid == MdocServiceCharacteristic.state.uuid || characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid {
+				server.subscribeCount += 1
+			}
+			if server.subscribeCount > 1 {
+				server.status = .connected
+			}
 		}
 
 		public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
@@ -148,18 +174,31 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 			return
 		}
 		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
-		guard status == .initialized || status == .disconnected || status == .responseSent else { error = MdocHelpers.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!"); return }
+		guard status == .initialized || status == .disconnected || status == .responseSent else {
+			error = MdocHelpers.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!")
+			return
+		}
 		deviceEngagement = DeviceEngagement(isBleServer: true, rfus: rfus)
 		try await deviceEngagement!.makePrivateKey(crv: crv, secureArea: secureArea)
 		sessionEncryption = nil
 #if os(iOS)
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
-		guard peripheralManager.state != .unauthorized else { error = MdocHelpers.makeError(code: .bleNotAuthorized); return }
-		if !isBlePoweredOn { try await withCheckedThrowingContinuation { c in continuationQrCodeReady = c } } // ensure that BLE is powered on before proceeding
+		guard peripheralManager.state != .unauthorized else {
+			error = MdocHelpers.makeError(code: .bleNotAuthorized)
+			return
+		}
+		if !isBlePoweredOn {
+			try await withCheckedThrowingContinuation { c in
+				continuationQrCodeReady = c
+			}
+		} // ensure that BLE is powered on before proceeding
 		logger.info("Created qrCode payload: \(qrCodePayload!)")
 #endif
 		// todo: issuerNameSpaces is not mandatory according to specs, need to change
-		guard docs.values.allSatisfy({ $0.issuerNameSpaces != nil }) else { error = MdocHelpers.makeError(code: .invalidInputDocument); return }
+		guard docs.values.allSatisfy({ $0.issuerNameSpaces != nil }) else {
+			error = MdocHelpers.makeError(code: .invalidInputDocument)
+			return
+		}
 		// Check that the peripheral manager has been authorized to use Bluetooth.
 		startBleAdvertising()
 	}
@@ -193,24 +232,42 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 			advertising = true
 			status = .qrEngagementReady
 		} else {
-			// once bt is powered on, advertise
-			if peripheralManager.state == .resetting { DispatchQueue.main.asyncAfter(deadline: .now()+1) { self.startBleAdvertising()} }
-			else { logger.info("Peripheral manager powered off") }
+		// once bt is powered on, advertise
+		if peripheralManager.state == .resetting {
+			DispatchQueue.main.asyncAfter(deadline: .now()+1) {
+				self.startBleAdvertising()
+			}
+		} else {
+			logger.info("Peripheral manager powered off")
+		}
 		}
 	}
 
 	public func stop() {
-		guard !isPreview else { return }
-		if let peripheralManager, peripheralManager.isAdvertising { peripheralManager.stopAdvertising() }
+		guard !isPreview else {
+			return
+		}
+		if let peripheralManager, peripheralManager.isAdvertising {
+			peripheralManager.stopAdvertising()
+		}
 		qrCodePayload = nil
 		advertising = false
 		subscribeCount = 0
-		if let pk = deviceEngagement?.privateKey { Task { @MainActor in try? await pk.secureArea.deleteKeyBatch(id: pk.privateKeyId, startIndex: 0, batchSize: 1); deviceEngagement?.privateKey = nil } }
-		if status == .error && initSuccess { status = .initializing }
+		if let pk = deviceEngagement?.privateKey {
+			Task { @MainActor in
+				try? await pk.secureArea.deleteKeyBatch(id: pk.privateKeyId, startIndex: 0, batchSize: 1)
+				deviceEngagement?.privateKey = nil
+			}
+		}
+		if status == .error && initSuccess {
+			status = .initializing
+		}
 	}
 
 	fileprivate func initPeripheralManager() {
-		guard peripheralManager == nil else { return }
+		guard peripheralManager == nil else {
+			return
+		}
 		bleDelegate = Delegate(server: self)
 		logger.info("Initializing BLE peripheral manager")
 		peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil)
@@ -218,7 +275,9 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	}
 
 	func handleStatusChange(_ newValue: TransferStatus) async {
-		guard !isPreview && !isInErrorState else { return }
+		guard !isPreview && !isInErrorState else {
+			return
+		}
 		logger.log(level: .info, "Transfer status will change to \(newValue)")
 		delegate?.didChangeStatus(newValue)
 		if newValue == .requestReceived {
@@ -265,14 +324,20 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 				self.sendDataWithUpdates()
 			}
 		}
-		if !b { errorToSend = MdocHelpers.makeError(code: .userRejected) }
+		if !b {
+			errorToSend = MdocHelpers.makeError(code: .userRejected)
+		}
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
 				guard let (drToSend, _, _, resMetadata) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData) else {
-					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return
+					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
+					return
 				}
-				guard let dts = drToSend.documents, !dts.isEmpty else { errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq); return  }
+				guard let dts = drToSend.documents, !dts.isEmpty else {
+					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
+					return
+				}
 				let dataRes = await MdocHelpers.getSessionDataToSend(sessionEncryption: sessionEncryption, status: .requestReceived, docToSend: drToSend)
 				switch dataRes {
 				case .success(let bytes):
@@ -283,14 +348,19 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 					errorToSend = err
 					return
 				}
+			} catch {
+				errorToSend = error
 			}
-			catch { errorToSend = error }
-			if let errorToSend { logger.error("Error sending data: \(errorToSend)")}
+			if let errorToSend {
+				logger.error("Error sending data: \(errorToSend)")
+			}
 		}
 	}
 
 	func handleErrorSet(_ newValue: Error?) {
-		guard let newValue else { return }
+		guard let newValue else {
+			return
+		}
 		status = .error
 		delegate?.didFinishedWithError(newValue)
 		logger.log(level: .error, "Transfer error \(newValue) (\(newValue.localizedDescription)")
@@ -313,7 +383,9 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	}
 
 	func sendDataWithUpdates() {
-		guard !isPreview else { return }
+		guard !isPreview else {
+			return
+		}
 		guard sendBuffer.count > 0 else {
 			status = .responseSent
 			logger.info("Finished sending BLE data")
