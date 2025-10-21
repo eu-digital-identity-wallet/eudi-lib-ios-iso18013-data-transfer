@@ -134,8 +134,8 @@ public class MdocHelpers {
 			} else {
 				guard issuerSigned[reqDocIdOrDocType] != nil else { continue }
 			}
-			let privateKeyObject = privateKeyObjects[reqDocIdOrDocType] // used only if doc.id
 			let doc = if haveSelectedItems { issuerSigned[reqDocIdOrDocType]! } else { Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType)!.0 }
+			let privateKeyObject = if haveSelectedItems { privateKeyObjects[reqDocIdOrDocType] } else { privateKeyObjects[docId!] }
 			let metadata = if haveSelectedItems { docMetadata[reqDocIdOrDocType] } else { docMetadata[docId!] }
 			resMetadata.append(metadata)
 			// Document's data must be in CBOR bytes that has the IssuerSigned structure according to ISO 23220-4
