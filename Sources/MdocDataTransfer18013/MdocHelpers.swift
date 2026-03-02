@@ -315,7 +315,7 @@ public class MdocHelpers {
 	///   - vc: The view controller that will present the settings
 	///   - action: The action to perform
 	@MainActor
-	public static func checkBleAccess(_ vc: UIViewController, action: @escaping ()->Void) {
+	public static func checkBleAccess(_ vc: UIViewController, action: @MainActor @escaping () -> Void) {
 		switch CBManager.authorization {
 		case .denied:
 			// "Denied, request permission from settings"
@@ -324,9 +324,9 @@ public class MdocHelpers {
 			logger.warning("Restricted, device owner must approve")
 		case .allowedAlways:
 			// "Authorized, proceed"
-			DispatchQueue.main.async { action() }
+			action()
 		case .notDetermined:
-			DispatchQueue.main.async { action() }
+			action()
 		@unknown default:
 			logger.info("Unknown authorization status")
 		}
@@ -337,7 +337,7 @@ public class MdocHelpers {
 	///   - vc:  The view controller that will present the settings
 	///   - action: The action to perform
 	@MainActor
-	public static func checkCameraAccess(_ vc: UIViewController, action: @escaping ()->Void) {
+	public static func checkCameraAccess(_ vc: UIViewController, action: @MainActor @escaping () -> Void) {
 		switch AVCaptureDevice.authorizationStatus(for: .video) {
 		case .denied:
 			// "Denied, request permission from settings"
@@ -346,11 +346,11 @@ public class MdocHelpers {
 			logger.warning("Restricted, device owner must approve")
 		case .authorized:
 			// "Authorized, proceed"
-			DispatchQueue.main.async { action() }
+			action()
 		case .notDetermined:
 			AVCaptureDevice.requestAccess(for: .video) { success in
 				if success {
-					DispatchQueue.main.async { action() }
+					Task { @MainActor in action() }
 				} else {
 					logger.info("Permission denied")
 				}
