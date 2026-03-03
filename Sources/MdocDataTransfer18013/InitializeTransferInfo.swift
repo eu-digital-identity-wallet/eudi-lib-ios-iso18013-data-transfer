@@ -4,14 +4,14 @@ import MdocSecurity18013
 
 public struct InitializeTransferData: Sendable {
 
-	public init(dataFormats: [String: String], documentData: [String: Data], documentKeyIndexes: [String: Int], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], docKeyInfos: [String: Data?], trustedCertificates: [Data], deviceAuthMethod: String, idsToDocTypes: [String: String], hashingAlgs: [String: String], zkSystemRepository: ZkSystemRepository? = nil) {
+	public init(dataFormats: [String: String], documentData: [String: Data], documentKeyIndexes: [String: Int], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], docKeyInfos: [String: Data?], iaca: [x5chain], deviceAuthMethod: String, idsToDocTypes: [String: String], hashingAlgs: [String: String], zkSystemRepository: ZkSystemRepository? = nil) {
         self.dataFormats = dataFormats
         self.documentData = documentData
 		self.documentKeyIndexes = documentKeyIndexes
 		self.docMetadata = docMetadata
 		self.docDisplayNames = docDisplayNames
         self.docKeyInfos = docKeyInfos
-        self.trustedCertificates = trustedCertificates
+        self.iaca = iaca
         self.deviceAuthMethod = deviceAuthMethod
         self.idsToDocTypes = idsToDocTypes
 		self.hashingAlgs = hashingAlgs
@@ -30,7 +30,7 @@ public struct InitializeTransferData: Sendable {
     /// doc-id to private key info
     public let docKeyInfos: [String: Data?]
     /// trusted certificates
-    public let trustedCertificates: [Data]
+    public let iaca: [x5chain]
     /// device auth method
     public let deviceAuthMethod: String
     /// document-id to document type map
@@ -50,7 +50,6 @@ public struct InitializeTransferData: Sendable {
 		let documentObjects = documentData
 		let docMetadata = docMetadata.compactMapValues { $0 }
 		let dataFormats = Dictionary(uniqueKeysWithValues: dataFormats.map { k,v in (k, DocDataFormat(rawValue: v)) }).compactMapValues { $0 }
-        let iaca = trustedCertificates.map { SecCertificateCreateWithData(nil, $0 as CFData)! }
         let deviceAuthMethod = DeviceAuthMethod(rawValue: deviceAuthMethod) ?? .deviceMac
 		return InitializeTransferInfo(dataFormats: dataFormats, documentObjects: documentObjects, docMetadata: docMetadata, docDisplayNames: docDisplayNames, privateKeyObjects: privateKeyObjects, iaca: iaca, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: hashingAlgs, zkSystemRepository: zkSystemRepository)
     }
@@ -68,7 +67,7 @@ public struct InitializeTransferInfo {
     /// doc-id to private key objects
     public let privateKeyObjects: [String: CoseKeyPrivate]
     /// trusted certificates
-    public let iaca: [SecCertificate]
+	public let iaca: [x5chain]
     /// device auth method
     public let deviceAuthMethod: DeviceAuthMethod
 	// document-id to document type map
