@@ -72,7 +72,7 @@ public class MdocHelpers {
 	///   - handOver: handOver structure
 	/// - Returns: A ``DeviceRequest`` object
 
-	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [String: IssuerSigned], docMetadata: [String: Data], iaca: [SecCertificate], requestData: Data, privateKeyObjects: [String: CoseKeyPrivate], dauthMethod: DeviceAuthMethod, unlockData: [String: Data], readerKeyRawData: [UInt8]?, handOver: CBOR) async -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo, isValidRequest: Bool), Error> {
+	public static func decodeRequestAndInformUser(deviceEngagement: DeviceEngagement?, docs: [String: IssuerSigned], docMetadata: [String: Data], iaca: [x5chain], requestData: Data, privateKeyObjects: [String: CoseKeyPrivate], dauthMethod: DeviceAuthMethod, unlockData: [String: Data], readerKeyRawData: [UInt8]?, handOver: CBOR) async -> Result<(sessionEncryption: SessionEncryption, deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo, isValidRequest: Bool), Error> {
 		do {
 			guard let seCbor = try CBOR.decode([UInt8](requestData)) else { logger.error("Request Data is not Cbor"); return .failure(Self.makeError(code: .requestDecodeError)) }
 			var se = try SessionEstablishment(cbor: seCbor)
@@ -90,7 +90,7 @@ public class MdocHelpers {
 			var userRequestInfo = UserRequestInfo(docDataFormats: docs.mapValues { _ in .cbor }, itemsRequested: validRequestItems, deviceRequestBytes: Data(requestData))
 			if let docR = deviceRequest.docRequests.first {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.sessionTranscript)
-				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, case let certData = docR.readerCertificates, certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthX5c: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootCerts: iaca) {
+				if let readerAuthRawCBOR = docR.readerAuthRawCBOR, case let certData = docR.readerCertificates, certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)), let (b,reasonFailure) = try? mdocAuth.validateReaderAuth(readerAuthCBOR: readerAuthRawCBOR, readerAuthX5c: certData, itemsRequestRawData: docR.itemsRequestRawData!, rootIaca: iaca) {
 					userRequestInfo.readerCertificateIssuer = MdocHelpers.getCN(from: x509.subject.description)
 					userRequestInfo.readerAuthValidated = b
 					if let reasonFailure { userRequestInfo.readerCertificateValidationMessage = reasonFailure }

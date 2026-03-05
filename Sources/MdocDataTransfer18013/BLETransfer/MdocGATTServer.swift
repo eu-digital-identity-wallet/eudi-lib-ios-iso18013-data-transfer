@@ -37,7 +37,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [String: IssuerSigned]!
 	public var docMetadata: [String: Data?]!
-	public var iaca: [SecCertificate]!
+	public var iaca: [x5chain]!
 	public var privateKeyObjects: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
 	public var zkSystemRepository: ZkSystemRepository?
