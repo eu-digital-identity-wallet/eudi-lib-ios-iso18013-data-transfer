@@ -5,7 +5,7 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 
 ----
 
-# EUDI ISO 18013-5 iOS Data Transfer library (ver 0.9.0)
+# EUDI ISO 18013-5 iOS Data Transfer library
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Swift](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer/actions/workflows/swift.yml/badge.svg)](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer/actions/workflows/swift.yml)
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer&metric=ncloc&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-iso18013-data-transfer)
