@@ -34,7 +34,7 @@ public typealias RequestItems = [DocType: [NameSpace: [RequestItem]]]
 public class MdocHelpers {
 
 	static var errorNoDocumentsDescriptionKey: String { "doctype_not_found" }
-	static func getErrorNoDocuments(_ docType: String) -> Error { NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: ["key": Self.errorNoDocumentsDescriptionKey, "%s": docType]) }
+	public static func getErrorNoDocuments(_ docType: String) -> Error { NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: ["key": Self.errorNoDocumentsDescriptionKey, "%s": docType]) }
 
 	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
 		let errorMessage = str ?? NSLocalizedString(code.description, comment: code.description)
@@ -416,7 +416,7 @@ public class MdocHelpers {
 }
 
 extension Optional where Wrapped: Collection {
-    var isNilOrEmpty: Bool {
+    public var isNilOrEmpty: Bool {
         return self?.isEmpty ?? true
     }
 }

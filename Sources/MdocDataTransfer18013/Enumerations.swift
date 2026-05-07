@@ -22,6 +22,7 @@ import Foundation
 public enum TransferStatus: String, Sendable {
 	case initializing
 	case initialized
+	case poweredOn
 	case qrEngagementReady
 	case connected
 	case started
