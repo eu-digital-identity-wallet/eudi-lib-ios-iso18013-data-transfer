@@ -34,15 +34,45 @@ public enum BleTransferMode: Sendable {
 	public static let QRHandover = CBOR.null
 }
 
-/// mdoc service characteristic definitions (mdoc is the GATT server)
-public enum MdocServiceCharacteristic: String, Sendable {
-	case state = "00000001-A123-48CE-896B-4C76973373E6"
-	case client2Server = "00000002-A123-48CE-896B-4C76973373E6"
-	case server2Client = "00000003-A123-48CE-896B-4C76973373E6"
+extension MdocGattServer {
+	/// mdoc service characteristic definitions (mdoc is the GATT server)
+	public enum MdocServiceCharacteristic: String, CustomStringConvertible, Sendable {
+		case state = "00000001-A123-48CE-896B-4C76973373E6"
+		case client2Server = "00000002-A123-48CE-896B-4C76973373E6"
+		case server2Client = "00000003-A123-48CE-896B-4C76973373E6"
+
+		public var description: String {
+			switch self {
+			case .state: return "State"
+			case .client2Server: return "Client to Server"
+			case .server2Client: return "Server to Client"
+			}
+		}
+		
+		init?(uuid: CBUUID) { self.init(rawValue: uuid.uuidString.uppercased()) }
+		var uuid: CBUUID { CBUUID(string: rawValue) }
+	}
 }
 
-extension MdocServiceCharacteristic {
-	init?(uuid: CBUUID) {	self.init(rawValue: uuid.uuidString.uppercased()) }
-	var uuid: CBUUID { CBUUID(string: rawValue) }
+extension MdocGattCentral {
+	/// mdoc service characteristic definitions (mdoc is the GATT server)
+	public enum MdocServiceCharacteristic: String, CustomStringConvertible, Sendable {
+		case state = "00000005-A123-48CE-896B-4C76973373E6"
+		case client2Server = "00000006-A123-48CE-896B-4C76973373E6"
+		case server2Client = "00000007-A123-48CE-896B-4C76973373E6"
+		case readerIdent = "00000008-A123-48CE-896B-4C76973373E6"
+
+		public var description: String {
+			switch self {
+			case .state: return "State"
+			case .client2Server: return "Client to Server"
+			case .server2Client: return "Server to Client"
+			case .readerIdent: return "Reader Ident"
+			}
+		}
+
+		init?(uuid: CBUUID) { self.init(rawValue: uuid.uuidString.uppercased()) }
+		var uuid: CBUUID { CBUUID(string: rawValue) }
+	}
 }
 

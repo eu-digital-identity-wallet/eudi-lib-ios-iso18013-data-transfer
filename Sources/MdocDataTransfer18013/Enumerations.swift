@@ -48,6 +48,9 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 	case sessionEncryptionNotInitialized
 	case deviceEngagementMissing
 	case readerKeyMissing
+	case bleInvalidStateLength
+	case bleInvalidStateByte
+	case bleNoData
 	
 	public var description: String {
 		switch self {
@@ -63,6 +66,9 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 		case .deviceEngagementMissing: return "DEVICE_ENGAGEMENT_MISSING"
 		case .readerKeyMissing: return "READER_KEY_MISSING"
 		case .sessionEncryptionNotInitialized: return "SESSION_ENCYPTION_NOT_INITIALIZED"
+		case .bleInvalidStateLength: return "INVALID_STATE_LENGTH"
+		case .bleInvalidStateByte: return "INVALID_STATE_BYTE"
+		case .bleNoData: return "NO_DATA"
 		default: return "GENERIC_ERROR"
 		}
 	}

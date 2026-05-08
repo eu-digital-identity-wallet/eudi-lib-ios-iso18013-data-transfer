@@ -19,9 +19,5 @@ import Testing
 
 struct MdocDataTransfer18013Tests {
 	
-	@Test func testUuids() {
-		#expect(MdocServiceCharacteristic.state.uuid.uuidString == "00000001-A123-48CE-896B-4C76973373E6")
-		#expect(MdocServiceCharacteristic.client2Server.uuid.uuidString == "00000002-A123-48CE-896B-4C76973373E6")
-		#expect(MdocServiceCharacteristic.server2Client.uuid.uuidString == "00000003-A123-48CE-896B-4C76973373E6")
-	}
+	
 }

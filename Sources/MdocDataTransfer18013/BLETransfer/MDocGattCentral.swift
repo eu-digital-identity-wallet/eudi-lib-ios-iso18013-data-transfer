@@ -18,153 +18,83 @@ import CoreBluetooth
 import Foundation
 import os
 
-enum CharacteristicsError: Error {
-	case missingMandatoryCharacteristic(name: String)
-	case missingMandatoryProperty(name: String, characteristicName: String)
-}
-
-@MainActor enum DataError: Sendable, Error {
-	case noData(characteristic: CBUUID)
-	case invalidStateLength
-	case unknownState(byte: UInt8)
-	case unknownCharacteristic(uuid: CBUUID)
-	case unknownDataTransferPrefix(byte: UInt8)
-}
-
-public class MdocGattCentral: NSObject, @unchecked Sendable {
-	func initialize() {
-		centralManager = CBCentralManager(delegate: self, queue: nil)
-	}
-
-	func isAuthorized() -> Bool {
-		centralManager.state != .unauthorized
-	}
-
-	func start() {
-		machinePendingState = .initial
-	}
-
-	func stop() {
-		disconnectFromDevice()
-	}
-
-	var uuid: String?
-	var readyContinuation: CheckedContinuation<Void, Error>?
-
-	enum MachineState {
-		case initial, hardwareOn, fatalError, complete, halted
-		case awaitPeripheralDiscovery, peripheralDiscovered, checkPeripheral
-		case awaitRequest, requestReceived, sendingResponse
-	}
+public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	var centralManager: CBCentralManager!
-	var serviceUuid: CBUUID
 	var peripheral: CBPeripheral?
 	var writeCharacteristic: CBCharacteristic?
 	var readCharacteristic: CBCharacteristic?
 	var stateCharacteristic: CBCharacteristic?
+	var hasReaderIdentity = false
+	var didSendStartRequest = false
 	var maximumCharacteristicSize: Int?
-	var writingQueueTotalChunks = 0
-	var writingQueueChunkIndex = 0
-	var writingQueue = [Data]()
-	var incomingMessageBuffer = Data()
-	var outgoingMessageBuffer = Data()
-	public var error: Error? = nil { willSet { if let newValue { delegate?.didFinishedWithError(newValue) } } }
-	public weak var delegate: (any MdocOfflineDelegate)?
-
-	var machineState = MachineState.initial
-	var machinePendingState = MachineState.initial {
+	var readBuffer = Data()
+	var sendBuffer = [Data]()
+	public var error: Error? = nil {
 		didSet {
-			updateState()
+			if let error {
+				status = .error
+				delegate?.didFinishedWithError(error)
+			}
+		}
+	}
+	public weak var delegate: (any MdocOfflineDelegate)?
+	public var status: TransferStatus = .initialized {
+		didSet {
+			delegate?.didChangeStatus(status)
 		}
 	}
 
-	public init(serviceUuid: CBUUID) {
-		self.serviceUuid = serviceUuid
+	required public override init() {
 		super.init()
-	}
-
-	private func updateState() {
-		var update = true
-
-		while update {
-			if machineState != machinePendingState {
-				logger.info("「\(machineState) → \(machinePendingState)」")
-			} else {
-				logger.info("「\(machineState)」")
-			}
-
-			update = false
-			switch machineState {
-			case .initial:
-				if machinePendingState == .hardwareOn {
-					machineState = machinePendingState
-					update = true
-				}
-
-			case .hardwareOn:
-				centralManager.scanForPeripherals(withServices: [serviceUuid])
-				machineState = machinePendingState
-				machinePendingState = .awaitPeripheralDiscovery
-				readyContinuation?.resume()
-				readyContinuation = nil
-
-			case .awaitPeripheralDiscovery:
-				if machinePendingState == .peripheralDiscovered {
-					machineState = machinePendingState
-				}
-
-			case .peripheralDiscovered:
-				if machinePendingState == .checkPeripheral {
-					machineState = machinePendingState
-					centralManager?.stopScan()
-				}
-
-			case .checkPeripheral:
-				if machinePendingState == .awaitRequest, let peripheral {
-					if let readCharacteristic, let stateCharacteristic {
-						peripheral.setNotifyValue(true, for: readCharacteristic)
-						peripheral.setNotifyValue(true, for: stateCharacteristic)
-						peripheral.writeValue(Data([0x01]), for: stateCharacteristic, type: .withoutResponse)
-						machineState = machinePendingState
-					}
-				}
-
-			case .awaitRequest:
-				if machinePendingState == .requestReceived {
-					machineState = machinePendingState
-					// send message to reader
-					incomingMessageBuffer = Data()
-				}
-
-			case .requestReceived:
-				if machinePendingState == .sendingResponse {
-					machineState = machinePendingState
-					let chunkSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
-					writingQueue = chunkMessage(outgoingMessageBuffer, chunkSize: chunkSize)
-					writingQueueTotalChunks = writingQueue.count
-					writingQueueChunkIndex = 0
-					drainWritingQueue()
-					update = true
-				}
-
-			case .sendingResponse:
-				if machinePendingState == .complete {
-					machineState = .complete
-				}
-
-			case .fatalError:
-				machineState = .halted
-				machinePendingState = .halted
-
-			case .complete, .halted:
-				break
-			}
+		centralManager = CBCentralManager(delegate: self, queue: nil)
+		status = .initialized
+		if isBlePoweredOn {
+			handleCentralPoweredOn()
 		}
 	}
 
-	func disconnectFromDevice() {
+	public func stop() {
+		disconnectFromDevice()
+	}
+
+    public func startBleAdvertising() {      
+    }
+
+    public func stopBleAdvertising() {
+    }
+
+    public var isBlePoweredOn: Bool { centralManager.state == .poweredOn }
+
+	public var isAuthorized: Bool {
+		centralManager.state != .unauthorized
+	}
+
+	private func handleCentralPoweredOn() {
+		status = .poweredOn
+		guard let serviceUuid = delegate?.deviceEngagement?.ble_uuid else {
+			logger.error("BLE initialization error")
+			error = MdocHelpers.makeError(code: .deviceEngagementMissing)
+			return
+		}
+		centralManager.scanForPeripherals(withServices: [CBUUID(string: serviceUuid)])
+		logger.info("Started scanning for peripherals with service UUID \(serviceUuid)")
+		status = .qrEngagementReady
+	}
+
+	private func tryStartRequestIfReady() {
+		guard hasReaderIdentity, !didSendStartRequest, let peripheral, let readCharacteristic, let stateCharacteristic else {
+			return
+		}
+		peripheral.setNotifyValue(true, for: readCharacteristic)
+		peripheral.setNotifyValue(true, for: stateCharacteristic)
+		peripheral.writeValue(Data(BleTransferMode.START_REQUEST), for: stateCharacteristic, type: .withoutResponse)
+		didSendStartRequest = true
+		status = .started
+	}
+
+	public func disconnectFromDevice() {
 		if let stateCharacteristic {
-			peripheral?.writeValue(Data([0x02]), for: stateCharacteristic, type: .withoutResponse)
+			peripheral?.writeValue(Data(BleTransferMode.END_REQUEST), for: stateCharacteristic, type: .withoutResponse)
 		}
 		disconnect()
 	}
@@ -174,125 +104,100 @@ public class MdocGattCentral: NSObject, @unchecked Sendable {
 			centralManager.cancelPeripheralConnection(peripheral)
 			self.peripheral = nil
 		}
+		hasReaderIdentity = false
+		didSendStartRequest = false
 	}
 
-	func send(_ data: Data) {
-		outgoingMessageBuffer = data
-		switch machineState {
-		case .requestReceived:
-			machinePendingState = .sendingResponse
-		default:
-			logger.info("Unexpected write in state \(machineState)")
-		}
-	}
-
-	private func drainWritingQueue() {
-		guard !writingQueue.isEmpty else {
-			// callback.callback(message: .uploadProgress(writingQueueTotalChunks, writingQueueTotalChunks))
-			machinePendingState = .complete
+	public func sendData(_ data: Data) {
+		guard status == .requestReceived else {
+			logger.info("Unexpected write in status \(status)")
 			return
 		}
-
-		var chunk = writingQueue.removeFirst()
-		writingQueueChunkIndex += 1
-		let firstByte: Data.Element = writingQueueChunkIndex == writingQueueTotalChunks ? 0x00 : 0x01
-		chunk.reverse()
-		chunk.append(firstByte)
-		chunk.reverse()
-		// callback.callback(message: .uploadProgress(writingQueueChunkIndex, writingQueueTotalChunks))
-		peripheral?.writeValue(chunk, for: writeCharacteristic!, type: .withoutResponse)
-		if firstByte == 0x00 {
-			machinePendingState = .complete
-			// callback.callback(message: .done)
-		}
+		status = .userSelected
+		let blockSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
+		sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: blockSize)
+		writeNextBlock()
 	}
 
-	private func chunkMessage(_ data: Data, chunkSize: Int) -> [Data] {
-		guard !data.isEmpty else {
-			return []
+	private func writeNextBlock() {
+		guard !sendBuffer.isEmpty else {
+			status = .responseSent
+			logger.info("Finished sending BLE data")
+			status = .disconnected
+			return
 		}
-		var chunks = [Data]()
-		var index = 0
-		while index < data.count {
-			let end = min(index + chunkSize, data.count)
-			chunks.append(data.subdata(in: index..<end))
-			index = end
+		guard let writeCharacteristic else {
+			error = MdocHelpers.makeError(code: .bleNotSupported)
+			return
 		}
-		return chunks
+		peripheral?.writeValue(sendBuffer.first!, for: writeCharacteristic, type: .withoutResponse)
+		if !sendBuffer.isEmpty { sendBuffer.removeFirst() }
 	}
 
-	private func getCharacteristic(list: [CBCharacteristic], uuid: CBUUID, properties: [CBCharacteristicProperties], required: Bool) throws -> CBCharacteristic? {
-		let characteristicName = MDocCharacteristicNameFromUUID(uuid)
-
-		if let candidate = list.first(where: { $0.uuid == uuid }) {
-			for property in properties where !candidate.properties.contains(property) {
-				let propertyName = MDocCharacteristicPropertyName(property)
-				if required {
-					throw CharacteristicsError.missingMandatoryProperty(name: propertyName, characteristicName: characteristicName)
-				} else {
-					return nil
-				}
+	private func getCharacteristic(list: [CBCharacteristic], mdocChar: MdocServiceCharacteristic, properties: [CBCharacteristicProperties], description: String) throws -> CBCharacteristic? {
+		if let characteristic = list.first(where: { $0.uuid == mdocChar.uuid }) {
+			for property in properties where !characteristic.properties.contains(property) {
+				logger.info("Characteristic \(mdocChar.description) is expected to have \(description) properties")
+				break
 			}
-			return candidate
-		}
-
-		if required {
-			throw CharacteristicsError.missingMandatoryCharacteristic(name: characteristicName)
+			return characteristic
+		} else {
+			logger.info("Characteristic \(mdocChar.description) with UUID \(mdocChar.uuid.uuidString) not found")
 		}
 		return nil
 	}
 
 	func processCharacteristics(peripheral: CBPeripheral, characteristics: [CBCharacteristic]) throws {
-		stateCharacteristic = try getCharacteristic(list: characteristics, uuid: readerStateCharacteristicId, properties: [.notify, .writeWithoutResponse], required: true)
-		writeCharacteristic = try getCharacteristic(list: characteristics, uuid: readerClient2ServerCharacteristicId, properties: [.writeWithoutResponse], required: true)
-		readCharacteristic = try getCharacteristic(list: characteristics, uuid: readerServer2ClientCharacteristicId, properties: [.notify], required: true)
-		if let readerIdent = try getCharacteristic(list: characteristics, uuid: readerIdentCharacteristicId, properties: [.read], required: true) {
+		stateCharacteristic = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.state, properties: [.notify, .writeWithoutResponse], description: "notify, writeWithoutResponse")
+		writeCharacteristic = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.client2Server, properties: [.writeWithoutResponse], description: "writeWithoutResponse")
+		readCharacteristic = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.server2Client, properties: [.notify], description: "notify")
+		if let readerIdent = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.readerIdent, properties: [.read], description: "read") {
 			peripheral.readValue(for: readerIdent)
 		}
 		let negotiatedMaximumCharacteristicSize = peripheral.maximumWriteValueLength(for: .withoutResponse)
 		maximumCharacteristicSize = min(negotiatedMaximumCharacteristicSize - 3, 512)
+		tryStartRequestIfReady()
 	}
 
 	func processData(peripheral: CBPeripheral, characteristic: CBCharacteristic) throws {
 		if var data = characteristic.value {
-			logger.info("Processing \(data.count) bytes for \(MDocCharacteristicNameFromUUID(characteristic.uuid)) -> ")
+			logger.info("Processing \(data.count) bytes for \(MdocServiceCharacteristic(uuid: characteristic.uuid)?.description ?? characteristic.uuid.uuidString)")
 			switch characteristic.uuid {
-			case readerStateCharacteristicId:
+			case MdocServiceCharacteristic.state.uuid:
 				if data.count != 1 {
-					throw DataError.invalidStateLength
+					error = MdocHelpers.makeError(code: .bleInvalidStateLength)
 				}
 				switch data[0] {
-				case 0x02:
-					// callback.callback(message: .done)
-					disconnect()
+				case BleTransferMode.END_REQUEST.first!: // 0x02:
+					status = .disconnected
 				case let byte:
-					throw DataError.unknownState(byte: byte)
+					logger.error("Unknown state \(byte)")
+					error = MdocHelpers.makeError(code: .bleInvalidStateByte)
 				}
-
-			case readerServer2ClientCharacteristicId:
+			case MdocServiceCharacteristic.server2Client.uuid:
 				let firstByte = data.popFirst()
-				incomingMessageBuffer.append(data)
+				readBuffer.append(data)
 				switch firstByte {
 				case .none:
-					throw DataError.noData(characteristic: characteristic.uuid)
-				case 0x00:
-					logger.info("End")
-					machinePendingState = .requestReceived
-				case 0x01:
-					logger.info("Chunk")
+					error = MdocHelpers.makeError(code: .bleNoData)
+				case BleTransferMode.END_DATA.first!: // 0x00:
+					delegate?.didReceiveRequest(readBuffer)
+					status = .requestReceived
+				case BleTransferMode.START_DATA.first!: break
 				case let .some(byte):
-					throw DataError.unknownDataTransferPrefix(byte: byte)
+					logger.error("Unknown data prefix \(byte)")
+					error = MdocHelpers.makeError(code: .bleNotSupported)
 				}
-
-			case readerIdentCharacteristicId:
+			case MdocServiceCharacteristic.readerIdent.uuid:
 				logger.info("Ident")
-				machinePendingState = .awaitRequest
-
+				hasReaderIdentity = true
+				tryStartRequestIfReady()
 			case let uuid:
-				throw DataError.unknownCharacteristic(uuid: uuid)
+				logger.error("Unknown characteristic \(uuid)")
+				error = MdocHelpers.makeError(code: .bleNotSupported)
 			}
 		} else {
-			throw DataError.noData(characteristic: characteristic.uuid)
+			error = MdocHelpers.makeError(code: .bleNoData)
 		}
 	}
 }
@@ -300,7 +205,7 @@ public class MdocGattCentral: NSObject, @unchecked Sendable {
 extension MdocGattCentral: CBCentralManagerDelegate {
 	public func centralManagerDidUpdateState(_ central: CBCentralManager) {
 		if central.state == .poweredOn {
-			machinePendingState = .hardwareOn
+			handleCentralPoweredOn()
 		} else {
 			error = MdocHelpers.makeError(code: .bleNotSupported)
 		}
@@ -311,12 +216,14 @@ extension MdocGattCentral: CBCentralManagerDelegate {
 		peripheral.delegate = self
 		self.peripheral = peripheral
 		centralManager?.connect(peripheral, options: nil)
-		machinePendingState = .peripheralDiscovered
+		centralManager?.stopScan()
 	}
 
 	public func centralManager(_: CBCentralManager, didConnect peripheral: CBPeripheral) {
-		peripheral.discoverServices([serviceUuid])
-		machinePendingState = .checkPeripheral
+		let serviceUuid = delegate?.deviceEngagement?.ble_uuid
+		peripheral.discoverServices([CBUUID(string: serviceUuid ?? "")])
+		status = .connected
+		tryStartRequestIfReady()
 	}
 }
 
@@ -360,7 +267,7 @@ extension MdocGattCentral: CBPeripheralDelegate {
 	}
 
 	public func peripheralIsReady(toSendWriteWithoutResponse _: CBPeripheral) {
-		drainWritingQueue()
+		writeNextBlock()
 	}
 
 	public func peripheral(_ peripheral: CBPeripheral, didModifyServices _: [CBService]) {
@@ -371,20 +278,13 @@ extension MdocGattCentral: CBPeripheralDelegate {
 extension MdocGattCentral: CBPeripheralManagerDelegate {
 	public func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
 		switch peripheral.state {
-		case .poweredOn:
-			logger.info("Peripheral Is Powered On.")
-		case .unsupported:
-			logger.info("Peripheral Is Unsupported.")
-		case .unauthorized:
-			logger.info("Peripheral Is Unauthorized.")
-		case .unknown:
-			logger.info("Peripheral Unknown")
-		case .resetting:
-			logger.info("Peripheral Resetting")
-		case .poweredOff:
-			print("Peripheral Is Powered Off.")
-		@unknown default:
-			logger.info("Error")
+		case .poweredOn: logger.info("Peripheral Is Powered On.")
+		case .unsupported: logger.info("Peripheral Is Unsupported.")
+		case .unauthorized: logger.info("Peripheral Is Unauthorized.")
+		case .unknown: logger.info("Peripheral Unknown")
+		case .resetting: logger.info("Peripheral Resetting")
+		case .poweredOff: logger.info("Peripheral Is Powered Off.")
+		@unknown default: logger.info("Error")
 		}
 	}
 }

@@ -227,12 +227,31 @@ public class MdocHelpers {
 		return (deviceResponseToSend, validReqItemsDocDict, errorReqItemsDocDict, resMetadata, zkpDocumentIds)
 	}
 
+	/// Prepares data blocks to be sent over BLE.	
+	static func prepareDataBlocksToSend(_ msg: Data, blockSize: Int) -> [Data] {
+		var sendBuffer = [Data]()
+		var numBlocks: Int = 0
+		numBlocks = MdocHelpers.countNumBlocks(dataLength: msg.count, maxBlockSize: blockSize)
+		logger.info("Sending response of total bytes \(msg.count) in \(numBlocks) blocks and block size: \(blockSize)")
+		sendBuffer.removeAll()
+		// send blocks
+		for i in 0..<numBlocks {
+			let (block,bEnd) = MdocHelpers.createBlockCommand(data: msg, blockId: i, maxBlockSize: blockSize)
+			var blockWithHeader = Data()
+			blockWithHeader.append(contentsOf: !bEnd ? BleTransferMode.START_DATA : BleTransferMode.END_DATA)
+			// send actual data after header
+			blockWithHeader.append(contentsOf: block)
+			sendBuffer.append(blockWithHeader)
+		}
+		return sendBuffer
+	}
+
 	/// Returns the number of blocks that dataLength bytes of data can be split into, given a maximum block size of maxBlockSize bytes.
 	/// - Parameters:
 	///   - dataLength: Length of data to be split
 	///   - maxBlockSize: The maximum block size
 	/// - Returns: Number of blocks
-	public static func CountNumBlocks(dataLength: Int, maxBlockSize: Int) -> Int {
+	public static func countNumBlocks(dataLength: Int, maxBlockSize: Int) -> Int {
 		let blockSize = maxBlockSize
 		var numBlocks = 0
 		if dataLength > maxBlockSize {
@@ -252,7 +271,7 @@ public class MdocHelpers {
 	///   - blockId: The id (number) of the block to be sent
 	///   - maxBlockSize: The maximum block size
 	/// - Returns: (chunk:The data block, bEnd: True if this is the last block, false otherwise)
-	public static func CreateBlockCommand(data: Data, blockId: Int, maxBlockSize: Int) -> (Data, Bool) {
+	public static func createBlockCommand(data: Data, blockId: Int, maxBlockSize: Int) -> (Data, Bool) {
 		let start = blockId * maxBlockSize
 		var end = (blockId+1) * maxBlockSize
 		var bEnd = false

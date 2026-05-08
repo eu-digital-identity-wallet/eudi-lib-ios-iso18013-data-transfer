@@ -16,11 +16,12 @@ limitations under the License.
 import Foundation
 
 public protocol MdocBleTransport {
-	func initializeBle()
+    init()
     func startBleAdvertising()
     func stopBleAdvertising()
     func stop()
 	var isBlePoweredOn: Bool { get }
 	var isAuthorized: Bool { get }
     func sendData(_ data: Data)
+	var delegate: (any MdocOfflineDelegate)? { get set }
 }

@@ -25,7 +25,7 @@ import MdocDataModel18013
 import MdocSecurity18013
 
 /// BLE Gatt server implementation of mdoc transfer manager
-public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableObject {
+public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	var peripheralManager: CBPeripheralManager!
 	var bleDelegate: Delegate!
 	var remoteCentral: CBCentral!
@@ -41,8 +41,8 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 	}
 	public var advertising: Bool = false
 	public var error: Error? = nil {
-		willSet {
-			handleErrorSet(newValue)
+		didSet {
+			handleErrorSet(error)
 		}
 	}
 	public var status: TransferStatus = .initializing {
@@ -52,20 +52,14 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 	}
 	var readBuffer = Data()
 	var sendBuffer = [Data]()
-	var numBlocks: Int = 0
 	var subscribeCount: Int = 0
 	var initSuccess:Bool = false
 
-	public init() {
+	required public init() {
 		status = .initialized
 		initPeripheralManager()
-		initSuccess = true
 	}
 	
-	public func initializeBle() {
-		initPeripheralManager()
-	}
-
 	@objc(CBPeripheralManagerDelegate)
 	class Delegate: NSObject, CBPeripheralManagerDelegate {
 		unowned var server: MdocGattServer
@@ -75,7 +69,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 		}
 
 		func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-			if server.sendBuffer.count > 0 {
+			if !server.sendBuffer.isEmpty {
 				self.server.sendDataWithUpdates()
 			}
 		}
@@ -150,9 +144,6 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 	/// Returns true if the peripheralManager state is poweredOn
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
 
-	/// Returns true if the peripheralManager state is unauthorized
-	public var isBlePermissionDenied: Bool { peripheralManager.state == .unauthorized }
-
 	func buildServices(uuid: String) {
 		let bleUserService = CBMutableService(type: CBUUID(string: uuid), primary: true)
 		stateCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.state.uuid, properties: [.notify, .writeWithoutResponse], value: nil, permissions: [.writeable])
@@ -171,12 +162,12 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil
-			guard let uuid = sessionDelegate.deviceEngagement?.ble_uuid else {
+			guard let serviceUuid = sessionDelegate.deviceEngagement?.ble_uuid else {
 				logger.error("BLE initialization error")
 				return
 			}
-			buildServices(uuid: uuid)
-			let advertisementData: [String: Any] = [ CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: uuid)], CBAdvertisementDataLocalNameKey: uuid ]
+			buildServices(uuid: serviceUuid)
+			let advertisementData: [String: Any] = [ CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: serviceUuid)], CBAdvertisementDataLocalNameKey: serviceUuid ]
 			// advertise the peripheral with the short UUID
 			peripheralManager.startAdvertising(advertisementData)
 			advertising = true
@@ -205,7 +196,6 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 	public func stop() {
 		stopBleAdvertising()
 		sessionDelegate.qrCodePayload = nil
-		advertising = false
 		subscribeCount = 0
 		if let pk = sessionDelegate.deviceEngagement?.privateKey {
 			Task { @MainActor in
@@ -213,7 +203,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 				sessionDelegate.deviceEngagement?.privateKey = nil
 			}
 		}
-		if status == .error && initSuccess {
+		if status == .error {
 			status = .initializing
 		}
 	}
@@ -238,31 +228,15 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 		logger.log(level: .error, "Transfer error \(newValue) (\(newValue.localizedDescription)")
 	}
 
-	func prepareDataToSend(_ msg: Data) {
-		let mbs = min(511, remoteCentral.maximumUpdateValueLength-1)
-		numBlocks = MdocHelpers.CountNumBlocks(dataLength: msg.count, maxBlockSize: mbs)
-		logger.info("Sending response of total bytes \(msg.count) in \(numBlocks) blocks and block size: \(mbs)")
-		sendBuffer.removeAll()
-		// send blocks
-		for i in 0..<numBlocks {
-			let (block,bEnd) = MdocHelpers.CreateBlockCommand(data: msg, blockId: i, maxBlockSize: mbs)
-			var blockWithHeader = Data()
-			blockWithHeader.append(contentsOf: !bEnd ? BleTransferMode.START_DATA : BleTransferMode.END_DATA)
-			// send actual data after header
-			blockWithHeader.append(contentsOf: block)
-			sendBuffer.append(blockWithHeader)
-		}
-	}
-
 	public func sendData(_ data: Data) {
-			prepareDataToSend(data)
+			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: min(511, remoteCentral.maximumUpdateValueLength-1))
 			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
 				self.sendDataWithUpdates()
 			}
 	}
 
 	func sendDataWithUpdates() {
-		guard sendBuffer.count > 0 else {
+		guard !sendBuffer.isEmpty else {
 			status = .responseSent
 			logger.info("Finished sending BLE data")
 			return
@@ -273,7 +247,6 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport, ObservableOb
 			sendDataWithUpdates()
 		}
 	}
-
 
 }
 
