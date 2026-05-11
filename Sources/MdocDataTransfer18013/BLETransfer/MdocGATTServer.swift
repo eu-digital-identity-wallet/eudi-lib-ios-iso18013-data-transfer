@@ -75,9 +75,9 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		}
 
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-			logger.info("CBPeripheralManager didUpdateState:")
-			logger.info(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")
-			if peripheral.state == .poweredOn, server.sessionDelegate.qrCodePayload != nil {
+			logger.info("CBPeripheralManager didUpdateState: \(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")")
+			if peripheral.state == .poweredOn { 
+				server.delegate?.didPoweredOn(isPeripheralManager: true)
 				server.status = .poweredOn
 			}
 		}
@@ -130,6 +130,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 				server.subscribeCount += 1
 			}
 			if server.subscribeCount > 1 {
+				server.delegate?.didConnected(isPeripheral: false, deviceName: central.identifier.uuidString)
 				server.status = .connected
 			}
 		}

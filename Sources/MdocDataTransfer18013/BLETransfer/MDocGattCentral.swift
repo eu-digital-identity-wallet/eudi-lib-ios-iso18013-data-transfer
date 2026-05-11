@@ -70,6 +70,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	private func handleCentralPoweredOn() {
+		delegate?.didPoweredOn(isPeripheralManager: false)
 		status = .poweredOn
 		guard let serviceUuid = delegate?.deviceEngagement?.ble_uuid else {
 			logger.error("BLE initialization error")
@@ -222,6 +223,7 @@ extension MdocGattCentral: CBCentralManagerDelegate {
 	public func centralManager(_: CBCentralManager, didConnect peripheral: CBPeripheral) {
 		let serviceUuid = delegate?.deviceEngagement?.ble_uuid
 		peripheral.discoverServices([CBUUID(string: serviceUuid ?? "")])
+		delegate?.didConnected(isPeripheral: true, deviceName: peripheral.name)
 		status = .connected
 		tryStartRequestIfReady()
 	}

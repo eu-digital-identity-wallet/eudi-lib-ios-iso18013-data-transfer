@@ -25,6 +25,8 @@ public protocol MdocOfflineDelegate: AnyObject {
 	func didChangeStatus(_ newStatus: TransferStatus)
 	func didFinishedWithError(_ error: Error)
 	func didReceiveRequest(_ data: Data)
+	func didPoweredOn(isPeripheralManager: Bool)
+	func didConnected(isPeripheral: Bool, deviceName: String?)
 }
 
 
