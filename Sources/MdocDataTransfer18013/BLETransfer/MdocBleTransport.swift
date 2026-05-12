@@ -13,11 +13,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+import Foundation
 
-import Testing
-@testable import MdocDataTransfer18013
-
-struct MdocDataTransfer18013Tests {
-	
-	
+public protocol MdocBleTransport {
+    init()
+    func startBleAdvertising()
+    func stopBleAdvertising()
+    func stop()
+	var isBlePoweredOn: Bool { get }
+	var isAuthorized: Bool { get }
+    func sendData(_ data: Data)
+	var delegate: (any MdocOfflineDelegate)? { get set }
 }

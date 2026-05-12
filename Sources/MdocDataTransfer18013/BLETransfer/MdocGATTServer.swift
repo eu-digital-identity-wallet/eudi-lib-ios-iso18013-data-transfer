@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-//  MdocGATTServer.swift
 import Foundation
 import SwiftCBOR
 import CoreBluetooth
@@ -26,62 +25,41 @@ import MdocDataModel18013
 import MdocSecurity18013
 
 /// BLE Gatt server implementation of mdoc transfer manager
-public class MdocGattServer: @unchecked Sendable, ObservableObject {
+public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	var peripheralManager: CBPeripheralManager!
 	var bleDelegate: Delegate!
 	var remoteCentral: CBCentral!
 	var stateCharacteristic: CBMutableCharacteristic!
 	var server2ClientCharacteristic: CBMutableCharacteristic!
-	public var deviceEngagement: DeviceEngagement?
-	public var deviceRequest: DeviceRequest?
-	public var sessionEncryption: SessionEncryption?
-	public var docs: [String: IssuerSigned]!
-	public var docMetadata: [String: Data?]!
-	public var iaca: [x5chain]!
-	public var privateKeyObjects: [String: CoseKeyPrivate]!
-	public var dauthMethod: DeviceAuthMethod
-	public var zkSystemRepository: ZkSystemRepository?
-	public var readerName: String?
-	public var qrCodePayload: String?
 	public weak var delegate: (any MdocOfflineDelegate)?
-	var continuationQrCodeReady: CheckedContinuation<Void, Error>?
+
+	private var sessionDelegate: any MdocOfflineDelegate {
+		guard let delegate else {
+			fatalError("MdocOfflineDelegate must be set before using MdocGattServer")
+		}
+		return delegate
+	}
 	public var advertising: Bool = false
 	public var error: Error? = nil {
-		willSet {
-			handleErrorSet(newValue)
+		didSet {
+			handleErrorSet(error)
 		}
 	}
 	public var status: TransferStatus = .initializing {
-		willSet {
-			Task { @MainActor in
-				await handleStatusChange(newValue)
-			}
+		didSet {
+			delegate?.didChangeStatus(status)
 		}
 	}
-	public var unlockData: [String: Data]!
-	public var deviceResponseBytes: Data?
-	/// response metadata array
-	public var responseMetadata: [Data?]!
-	public var zkpDocumentIds: [String]!
 	var readBuffer = Data()
 	var sendBuffer = [Data]()
-	var numBlocks: Int = 0
 	var subscribeCount: Int = 0
 	var initSuccess:Bool = false
 
-	public init(parameters: InitializeTransferData) async throws {
-		let objs = try await parameters.toInitializeTransferInfo()
-		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
-		docMetadata = parameters.docMetadata
-		self.privateKeyObjects = objs.privateKeyObjects
-		self.iaca = objs.iaca
-		self.dauthMethod = objs.deviceAuthMethod
-		self.zkSystemRepository = objs.zkSystemRepository
+	required public init() {
 		status = .initialized
 		initPeripheralManager()
-		initSuccess = true
 	}
-
+	
 	@objc(CBPeripheralManagerDelegate)
 	class Delegate: NSObject, CBPeripheralManagerDelegate {
 		unowned var server: MdocGattServer
@@ -91,17 +69,16 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		}
 
 		func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-			if server.sendBuffer.count > 0 {
+			if !server.sendBuffer.isEmpty {
 				self.server.sendDataWithUpdates()
 			}
 		}
 
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-			logger.info("CBPeripheralManager didUpdateState:")
-			logger.info(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")
-			if peripheral.state == .poweredOn, server.qrCodePayload != nil {
-				server.continuationQrCodeReady?.resume()
-				server.continuationQrCodeReady = nil
+			logger.info("CBPeripheralManager didUpdateState: \(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")")
+			if peripheral.state == .poweredOn { 
+				server.delegate?.didPoweredOn(isPeripheralManager: true)
+				server.status = .poweredOn
 			}
 		}
 
@@ -131,6 +108,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 						server.readBuffer.append(data.advanced(by: 1))
 					}
 					if bEnd {
+						server.delegate?.didReceiveRequest(server.readBuffer)
 						server.status = .requestReceived
 					}
 				}
@@ -152,6 +130,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 				server.subscribeCount += 1
 			}
 			if server.subscribeCount > 1 {
+				server.delegate?.didConnected(isPeripheral: false, deviceName: central.identifier.uuidString)
 				server.status = .connected
 			}
 		}
@@ -166,47 +145,6 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 	/// Returns true if the peripheralManager state is poweredOn
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
 
-	/// Returns true if the peripheralManager state is unauthorized
-	public var isBlePermissionDenied: Bool { peripheralManager.state == .unauthorized }
-
-	// Create a new device engagement object and start the device engagement process.
-	///
-	/// ``qrCodePayload`` is set to QR code data corresponding to the device engagement.
-	public func performDeviceEngagement(secureArea: any SecureArea, crv: CoseEcCurve, rfus: [String]? = nil) async throws {
-		guard !isInErrorState else {
-			logger.info("Current status is \(status)")
-			return
-		}
-		// Check that the class is in the right state to start the device engagement process. It will fail if the class is in any other state.
-		guard status == .initialized || status == .disconnected || status == .responseSent else {
-			error = MdocHelpers.makeError(code: .unexpected_error, str: error?.localizedDescription ?? "Not initialized!")
-			return
-		}
-		deviceEngagement = DeviceEngagement(supportsCentralClientMode: false, supportsPeripheralServerMode: true, rfus: rfus)
-		try await deviceEngagement!.makePrivateKey(crv: crv, secureArea: secureArea)
-		sessionEncryption = nil
-#if os(iOS)
-		qrCodePayload = deviceEngagement!.getQrCodePayload()
-		guard peripheralManager.state != .unauthorized else {
-			error = MdocHelpers.makeError(code: .bleNotAuthorized)
-			return
-		}
-		if !isBlePoweredOn {
-			try await withCheckedThrowingContinuation { c in
-				continuationQrCodeReady = c
-			}
-		} // ensure that BLE is powered on before proceeding
-		logger.info("Created qrCode payload: \(qrCodePayload!)")
-#endif
-		// todo: issuerNameSpaces is not mandatory according to specs, need to change
-		guard docs.values.allSatisfy({ $0.issuerNameSpaces != nil }) else {
-			error = MdocHelpers.makeError(code: .invalidInputDocument)
-			return
-		}
-		// Check that the peripheral manager has been authorized to use Bluetooth.
-		startBleAdvertising()
-	}
-
 	func buildServices(uuid: String) {
 		let bleUserService = CBMutableService(type: CBUUID(string: uuid), primary: true)
 		stateCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.state.uuid, properties: [.notify, .writeWithoutResponse], value: nil, permissions: [.writeable])
@@ -217,7 +155,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		peripheralManager.add(bleUserService)
 	}
 
-	func startBleAdvertising() {
+	public func startBleAdvertising() {
 		guard !isInErrorState else {
 			logger.info("Current status is \(status)")
 			return
@@ -225,12 +163,12 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		if peripheralManager.state == .poweredOn {
 			logger.info("Peripheral manager powered on")
 			error = nil
-			guard let uuid = deviceEngagement?.ble_uuid else {
+			guard let serviceUuid = sessionDelegate.deviceEngagement?.ble_uuid else {
 				logger.error("BLE initialization error")
 				return
 			}
-			buildServices(uuid: uuid)
-			let advertisementData: [String: Any] = [ CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: uuid)], CBAdvertisementDataLocalNameKey: uuid ]
+			buildServices(uuid: serviceUuid)
+			let advertisementData: [String: Any] = [ CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: serviceUuid)], CBAdvertisementDataLocalNameKey: serviceUuid ]
 			// advertise the peripheral with the short UUID
 			peripheralManager.startAdvertising(advertisementData)
 			advertising = true
@@ -247,25 +185,31 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		}
 	}
 
-	public func stop() {
+	public var isAuthorized: Bool { peripheralManager.state != .unauthorized }
+	
+	public func stopBleAdvertising() {
 		if let peripheralManager, peripheralManager.isAdvertising {
 			peripheralManager.stopAdvertising()
 		}
-		qrCodePayload = nil
 		advertising = false
+	}
+
+	public func stop() {
+		stopBleAdvertising()
+		sessionDelegate.qrCodePayload = nil
 		subscribeCount = 0
-		if let pk = deviceEngagement?.privateKey {
+		if let pk = sessionDelegate.deviceEngagement?.privateKey {
 			Task { @MainActor in
 				try? await pk.secureArea.deleteKeyBatch(id: pk.privateKeyId, startIndex: 0, batchSize: 1)
-				deviceEngagement?.privateKey = nil
+				sessionDelegate.deviceEngagement?.privateKey = nil
 			}
 		}
-		if status == .error && initSuccess {
+		if status == .error {
 			status = .initializing
 		}
 	}
 
-	fileprivate func initPeripheralManager() {
+	func initPeripheralManager() {
 		guard peripheralManager == nil else {
 			return
 		}
@@ -275,87 +219,7 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		subscribeCount = 0
 	}
 
-	func handleStatusChange(_ newValue: TransferStatus) async {
-		guard !isInErrorState else {
-			return
-		}
-		logger.log(level: .info, "Transfer status will change to \(newValue)")
-		delegate?.didChangeStatus(newValue)
-		if newValue == .requestReceived {
-			peripheralManager.stopAdvertising()
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: docMetadata.compactMapValues { $0 }, iaca: iaca, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
-			switch decodedRes {
-			case .success(let decoded):
-				self.deviceRequest = decoded.deviceRequest
-				sessionEncryption = decoded.sessionEncryption
-				if decoded.isValidRequest {
-					delegate?.didReceiveRequest(decoded.userRequestInfo, handleSelected: userSelected)
-				} else {
-					await userSelected(false, nil)
-					delegate?.didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."]))
-				}
-			case .failure(let err):
-				error = err
-				return
-			}
-		}
-		else if newValue == .initialized {
-			initPeripheralManager()
-		} else if newValue == .disconnected && status != .disconnected {
-			sessionEncryption = nil
-			stop()
-		}
-	}
-
 	var isInErrorState: Bool { status == .error }
-
-	public func userSelected(_ b: Bool, _ items: RequestItems?) async {
-		status = .userSelected
-		let resError = await MdocHelpers.getSessionDataToSend(sessionEncryption: sessionEncryption, status: .error, docToSend: DeviceResponse(status: 0))
-		var bytesToSend = try! resError.get()
-		deviceResponseBytes = bytesToSend.1
-		var errorToSend: Error?
-		defer {
-			logger.info("Prepare \(bytesToSend.0.count) bytes to send")
-			prepareDataToSend(bytesToSend.0)
-			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
-				self.sendDataWithUpdates()
-			}
-		}
-		if !b {
-			errorToSend = MdocHelpers.makeError(code: .userRejected)
-		}
-		if let items {
-			do {
-				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _, resMetadata, _, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, zkSystemRepository: zkSystemRepository) else {
-					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
-					return
-				}
-				guard !drToSend.documents.isNilOrEmpty || !drToSend.zkDocuments.isNilOrEmpty else {
-					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
-					return
-				}
-				let dataRes = await MdocHelpers.getSessionDataToSend(sessionEncryption: sessionEncryption, status: .requestReceived, docToSend: drToSend)
-				switch dataRes {
-				case .success(let bytes):
-					bytesToSend = bytes
-					deviceResponseBytes = bytes.1
-					responseMetadata = resMetadata
-					zkpDocumentIds = resZkpDocIds
-				case .failure(let err):
-					errorToSend = err
-					return
-				}
-			} catch {
-				errorToSend = error
-			}
-			if let errorToSend {
-				logger.error("Error sending data: \(errorToSend)")
-			}
-		}
-	}
-
 	func handleErrorSet(_ newValue: Error?) {
 		guard let newValue else {
 			return
@@ -365,24 +229,15 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 		logger.log(level: .error, "Transfer error \(newValue) (\(newValue.localizedDescription)")
 	}
 
-	func prepareDataToSend(_ msg: Data) {
-		let mbs = min(511, remoteCentral.maximumUpdateValueLength-1)
-		numBlocks = MdocHelpers.CountNumBlocks(dataLength: msg.count, maxBlockSize: mbs)
-		logger.info("Sending response of total bytes \(msg.count) in \(numBlocks) blocks and block size: \(mbs)")
-		sendBuffer.removeAll()
-		// send blocks
-		for i in 0..<numBlocks {
-			let (block,bEnd) = MdocHelpers.CreateBlockCommand(data: msg, blockId: i, maxBlockSize: mbs)
-			var blockWithHeader = Data()
-			blockWithHeader.append(contentsOf: !bEnd ? BleTransferMode.START_DATA : BleTransferMode.END_DATA)
-			// send actual data after header
-			blockWithHeader.append(contentsOf: block)
-			sendBuffer.append(blockWithHeader)
-		}
+	public func sendData(_ data: Data) {
+			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: min(511, remoteCentral.maximumUpdateValueLength-1))
+			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
+				self.sendDataWithUpdates()
+			}
 	}
 
 	func sendDataWithUpdates() {
-		guard sendBuffer.count > 0 else {
+		guard !sendBuffer.isEmpty else {
 			status = .responseSent
 			logger.info("Finished sending BLE data")
 			return
@@ -393,7 +248,6 @@ public class MdocGattServer: @unchecked Sendable, ObservableObject {
 			sendDataWithUpdates()
 		}
 	}
-
 
 }
 

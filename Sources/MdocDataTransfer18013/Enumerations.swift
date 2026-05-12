@@ -17,11 +17,28 @@ limitations under the License.
 //  TransferStatus.swift
 
 import Foundation
+import SwiftCBOR
+/// The enum BleTransferMode defines the two roles in the communication, which can be a server or a client.
+///
+/// The four static variables are used to signal the start and the end of the communication. This is done by sending the bytes 0x01 and 0x02 for the start and end of the communication, respectively. For the start and end of the data transmission, the bytes 0x01 and 0x00 are used.
+public enum BleTransferMode: Sendable {
+	case server
+	case client
+	case both
+	// signals for coordination
+	static let START_REQUEST: [UInt8] = [0x01]
+	static let END_REQUEST: [UInt8] = [0x02]
+	static let START_DATA: [UInt8] = [0x01]
+	static let END_DATA: [UInt8] = [0x00]
+	public static let BASE_UUID_SUFFIX_SERVICE = "-0000-1000-8000-00805F9B34FB"
+	public static let QRHandover = CBOR.null
+}
 
 /// Transfer status enumeration
 public enum TransferStatus: String, Sendable {
 	case initializing
 	case initialized
+	case poweredOn
 	case qrEngagementReady
 	case connected
 	case started
@@ -47,6 +64,9 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 	case sessionEncryptionNotInitialized
 	case deviceEngagementMissing
 	case readerKeyMissing
+	case bleInvalidStateLength
+	case bleInvalidStateByte
+	case bleNoData
 	
 	public var description: String {
 		switch self {
@@ -62,6 +82,9 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 		case .deviceEngagementMissing: return "DEVICE_ENGAGEMENT_MISSING"
 		case .readerKeyMissing: return "READER_KEY_MISSING"
 		case .sessionEncryptionNotInitialized: return "SESSION_ENCYPTION_NOT_INITIALIZED"
+		case .bleInvalidStateLength: return "INVALID_STATE_LENGTH"
+		case .bleInvalidStateByte: return "INVALID_STATE_BYTE"
+		case .bleNoData: return "NO_DATA"
 		default: return "GENERIC_ERROR"
 		}
 	}

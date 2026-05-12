@@ -19,30 +19,45 @@ import Foundation
 import CoreBluetooth
 import SwiftCBOR
 
-/// The enum BleTransferMode defines the two roles in the communication, which can be a server or a client.
-///
-/// The four static variables are used to signal the start and the end of the communication. This is done by sending the bytes 0x01 and 0x02 for the start and end of the communication, respectively. For the start and end of the data transmission, the bytes 0x01 and 0x00 are used.
-public enum BleTransferMode: Sendable {
-	case server
-	case client
-	// signals for coordination
-	static let START_REQUEST: [UInt8] = [0x01]
-	static let END_REQUEST: [UInt8] = [0x02]
-	static let START_DATA: [UInt8] = [0x01]
-	static let END_DATA: [UInt8] = [0x00]
-	public static let BASE_UUID_SUFFIX_SERVICE = "-0000-1000-8000-00805F9B34FB"
-	public static let QRHandover = CBOR.null
+extension MdocGattServer {
+	/// mdoc service characteristic definitions (mdoc is the GATT server)
+	public enum MdocServiceCharacteristic: String, CustomStringConvertible, Sendable {
+		case state = "00000001-A123-48CE-896B-4C76973373E6"
+		case client2Server = "00000002-A123-48CE-896B-4C76973373E6"
+		case server2Client = "00000003-A123-48CE-896B-4C76973373E6"
+
+		public var description: String {
+			switch self {
+			case .state: return "State"
+			case .client2Server: return "Client to Server"
+			case .server2Client: return "Server to Client"
+			}
+		}
+		
+		init?(uuid: CBUUID) { self.init(rawValue: uuid.uuidString.uppercased()) }
+		var uuid: CBUUID { CBUUID(string: rawValue) }
+	}
 }
 
-/// mdoc service characteristic definitions (mdoc is the GATT server)
-public enum MdocServiceCharacteristic: String, Sendable {
-	case state = "00000001-A123-48CE-896B-4C76973373E6"
-	case client2Server = "00000002-A123-48CE-896B-4C76973373E6"
-	case server2Client = "00000003-A123-48CE-896B-4C76973373E6"
-}
+extension MdocGattCentral {
+	/// mdoc service characteristic definitions (mdoc is the GATT server)
+	public enum MdocServiceCharacteristic: String, CustomStringConvertible, Sendable {
+		case state = "00000005-A123-48CE-896B-4C76973373E6"
+		case client2Server = "00000006-A123-48CE-896B-4C76973373E6"
+		case server2Client = "00000007-A123-48CE-896B-4C76973373E6"
+		case readerIdent = "00000008-A123-48CE-896B-4C76973373E6"
 
-extension MdocServiceCharacteristic {
-	init?(uuid: CBUUID) {	self.init(rawValue: uuid.uuidString.uppercased()) }
-	var uuid: CBUUID { CBUUID(string: rawValue) }
+		public var description: String {
+			switch self {
+			case .state: return "State"
+			case .client2Server: return "Client to Server"
+			case .server2Client: return "Server to Client"
+			case .readerIdent: return "Reader Ident"
+			}
+		}
+
+		init?(uuid: CBUUID) { self.init(rawValue: uuid.uuidString.uppercased()) }
+		var uuid: CBUUID { CBUUID(string: rawValue) }
+	}
 }
 
