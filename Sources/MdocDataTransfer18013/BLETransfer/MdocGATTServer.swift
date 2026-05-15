@@ -75,7 +75,18 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		}
 
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-			logger.info("CBPeripheralManager didUpdateState: \(peripheral.state == .poweredOn ? "Powered on" : peripheral.state == .unauthorized ? "Unauthorized" : peripheral.state == .unsupported ? "Unsupported" : "Powered off")")
+			let stateDescription: String
+			switch peripheral.state {
+			case .poweredOn:
+				stateDescription = "Powered on"
+			case .unauthorized:
+				stateDescription = "Unauthorized"
+			case .unsupported:
+				stateDescription = "Unsupported"
+			default:
+				stateDescription = "Powered off"
+			}
+			logger.info("CBPeripheralManager didUpdateState: \(stateDescription)")
 			if peripheral.state == .poweredOn { 
 				server.delegate?.didPoweredOn(isPeripheralManager: true)
 				server.status = .poweredOn
@@ -83,23 +94,24 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		}
 
 		func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
-			if requests[0].characteristic.uuid == MdocServiceCharacteristic.state.uuid, let h = requests[0].value?.first {
-				if h == BleTransferMode.START_REQUEST.first! {
+			if requests[0].characteristic.uuid == MdocServiceCharacteristic.state.uuid,
+				let stateByte = requests[0].value?.first {
+				if stateByte == BleTransferMode.START_REQUEST.first! {
 					logger.info("Start request received to state characteristic") // --> start
 					server.status = .started
 					server.readBuffer.removeAll()
-				} else if h == BleTransferMode.END_REQUEST.first! {
+				} else if stateByte == BleTransferMode.END_REQUEST.first! {
 					logger.info("End received to state characteristic (status: \(server.status))") // --> end
 					server.status = .disconnected
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
 				for r in requests {
-					guard let data = r.value, let h = data.first else {
+					guard let data = r.value, let firstByte = data.first else {
 						continue
 					}
-					let bStart = h == BleTransferMode.START_DATA.first!
-					let bEnd = (h == BleTransferMode.END_DATA.first!)
-					if !bStart && !bEnd {
+					let isStartBlock = firstByte == BleTransferMode.START_DATA.first!
+					let isEndBlock = firstByte == BleTransferMode.END_DATA.first!
+					if !isStartBlock && !isEndBlock {
 						logger.warning("Not a valid request block: \(data)")
 						peripheral.respond(to: requests[0], withResult: .unlikelyError)
 						return
@@ -107,7 +119,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 					if data.count > 1 {
 						server.readBuffer.append(data.advanced(by: 1))
 					}
-					if bEnd {
+					if isEndBlock {
 						server.delegate?.didReceiveRequest(server.readBuffer)
 						server.status = .requestReceived
 					}
@@ -119,14 +131,20 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			peripheral.respond(to: requests[0], withResult: .success)
 		}
 
-		public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
+		public func peripheralManager(
+			_ peripheral: CBPeripheralManager,
+			central: CBCentral,
+			didSubscribeTo characteristic: CBCharacteristic
+		) {
 			guard server.status == .qrEngagementReady else {
 				return
 			}
 			let mdocCbc = MdocServiceCharacteristic(uuid: characteristic.uuid)
 			logger.info("Remote central \(central.identifier) connected for \(mdocCbc?.rawValue ?? "") characteristic")
 			server.remoteCentral = central
-			if characteristic.uuid == MdocServiceCharacteristic.state.uuid || characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid {
+			let isStateCharacteristic = characteristic.uuid == MdocServiceCharacteristic.state.uuid
+			let isServerToClientCharacteristic = characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid
+			if isStateCharacteristic || isServerToClientCharacteristic {
 				server.subscribeCount += 1
 			}
 			if server.subscribeCount > 1 {
@@ -135,7 +153,11 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			}
 		}
 
-		public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
+		public func peripheralManager(
+			_ peripheral: CBPeripheralManager,
+			central: CBCentral,
+			didUnsubscribeFrom characteristic: CBCharacteristic
+		) {
 			let mdocCbc = MdocServiceCharacteristic(uuid: characteristic.uuid)
 			logger.info("Remote central \(central.identifier) disconnected for \(mdocCbc?.rawValue ?? "") characteristic")
 			server.status = .disconnected
@@ -147,9 +169,28 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 
 	func buildServices(uuid: String) {
 		let bleUserService = CBMutableService(type: CBUUID(string: uuid), primary: true)
-		stateCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.state.uuid, properties: [.notify, .writeWithoutResponse], value: nil, permissions: [.writeable])
-		let client2ServerCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.client2Server.uuid, properties: [.writeWithoutResponse], value: nil, permissions: [.writeable])
-		server2ClientCharacteristic = CBMutableCharacteristic(type: MdocServiceCharacteristic.server2Client.uuid, properties: [.notify], value: nil, permissions: [])
+		let stateProperties: CBCharacteristicProperties = [.notify, .writeWithoutResponse]
+		let clientToServerProperties: CBCharacteristicProperties = [.writeWithoutResponse]
+		let serverToClientProperties: CBCharacteristicProperties = [.notify]
+		let writablePermissions: CBAttributePermissions = [.writeable]
+		stateCharacteristic = CBMutableCharacteristic(
+			type: MdocServiceCharacteristic.state.uuid,
+			properties: stateProperties,
+			value: nil,
+			permissions: writablePermissions
+		)
+		let client2ServerCharacteristic = CBMutableCharacteristic(
+			type: MdocServiceCharacteristic.client2Server.uuid,
+			properties: clientToServerProperties,
+			value: nil,
+			permissions: writablePermissions
+		)
+		server2ClientCharacteristic = CBMutableCharacteristic(
+			type: MdocServiceCharacteristic.server2Client.uuid,
+			properties: serverToClientProperties,
+			value: nil,
+			permissions: []
+		)
 		bleUserService.characteristics = [stateCharacteristic, client2ServerCharacteristic, server2ClientCharacteristic]
 		peripheralManager.removeAllServices()
 		peripheralManager.add(bleUserService)
@@ -168,7 +209,11 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 				return
 			}
 			buildServices(uuid: serviceUuid)
-			let advertisementData: [String: Any] = [ CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: serviceUuid)], CBAdvertisementDataLocalNameKey: serviceUuid ]
+			let advertisedServiceUuids = [CBUUID(string: serviceUuid)]
+			let advertisementData: [String: Any] = [
+				CBAdvertisementDataServiceUUIDsKey: advertisedServiceUuids,
+				CBAdvertisementDataLocalNameKey: serviceUuid
+			]
 			// advertise the peripheral with the short UUID
 			peripheralManager.startAdvertising(advertisementData)
 			advertising = true
@@ -215,7 +260,8 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		}
 		bleDelegate = Delegate(server: self)
 		logger.info("Initializing BLE peripheral manager")
-		peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil, options: [CBPeripheralManagerOptionShowPowerAlertKey: true])
+		let managerOptions = [CBPeripheralManagerOptionShowPowerAlertKey: true]
+		peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil, options: managerOptions)
 		subscribeCount = 0
 	}
 
@@ -230,7 +276,8 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	}
 
 	public func sendData(_ data: Data) {
-			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: min(511, remoteCentral.maximumUpdateValueLength-1))
+			let maxPayloadBlockSize = min(511, remoteCentral.maximumUpdateValueLength - 1)
+			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: maxPayloadBlockSize)
 			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
 				self.sendDataWithUpdates()
 			}
@@ -242,8 +289,13 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			logger.info("Finished sending BLE data")
 			return
 		}
-		let b = peripheralManager.updateValue(sendBuffer.first!, for: server2ClientCharacteristic, onSubscribedCentrals: [remoteCentral])
-		if b, sendBuffer.count > 0 {
+		let firstPendingBlock = sendBuffer.first!
+		let isUpdateAccepted = peripheralManager.updateValue(
+			firstPendingBlock,
+			for: server2ClientCharacteristic,
+			onSubscribedCentrals: [remoteCentral]
+		)
+		if isUpdateAccepted, sendBuffer.count > 0 {
 			sendBuffer.removeFirst()
 			sendDataWithUpdates()
 		}

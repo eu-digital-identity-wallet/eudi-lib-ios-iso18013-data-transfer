@@ -135,7 +135,12 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		if !sendBuffer.isEmpty { sendBuffer.removeFirst() }
 	}
 
-	private func getCharacteristic(list: [CBCharacteristic], mdocChar: MdocServiceCharacteristic, properties: [CBCharacteristicProperties], description: String) throws -> CBCharacteristic? {
+	private func getCharacteristic(
+		list: [CBCharacteristic],
+		mdocChar: MdocServiceCharacteristic,
+		properties: [CBCharacteristicProperties],
+		description: String
+	) throws -> CBCharacteristic? {
 		if let characteristic = list.first(where: { $0.uuid == mdocChar.uuid }) {
 			for property in properties where !characteristic.properties.contains(property) {
 				logger.info("Characteristic \(mdocChar.description) is expected to have \(description) properties")
@@ -148,11 +153,38 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		return nil
 	}
 
-	func processCharacteristics(peripheral: CBPeripheral, characteristics: [CBCharacteristic]) throws {
-		stateCharacteristic = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.state, properties: [.notify, .writeWithoutResponse], description: "notify, writeWithoutResponse")
-		writeCharacteristic = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.client2Server, properties: [.writeWithoutResponse], description: "writeWithoutResponse")
-		readCharacteristic = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.server2Client, properties: [.notify], description: "notify")
-		if let readerIdent = try getCharacteristic(list: characteristics, mdocChar: MdocServiceCharacteristic.readerIdent, properties: [.read], description: "read") {
+	func processCharacteristics(
+		peripheral: CBPeripheral,
+		characteristics: [CBCharacteristic]
+	) throws {
+		let stateProperties: [CBCharacteristicProperties] = [.notify, .writeWithoutResponse]
+		let writeProperties: [CBCharacteristicProperties] = [.writeWithoutResponse]
+		let readProperties: [CBCharacteristicProperties] = [.notify]
+		let readerIdentityProperties: [CBCharacteristicProperties] = [.read]
+		stateCharacteristic = try getCharacteristic(
+			list: characteristics,
+			mdocChar: .state,
+			properties: stateProperties,
+			description: "notify, writeWithoutResponse"
+		)
+		writeCharacteristic = try getCharacteristic(
+			list: characteristics,
+			mdocChar: .client2Server,
+			properties: writeProperties,
+			description: "writeWithoutResponse"
+		)
+		readCharacteristic = try getCharacteristic(
+			list: characteristics,
+			mdocChar: .server2Client,
+			properties: readProperties,
+			description: "notify"
+		)
+		if let readerIdent = try getCharacteristic(
+			list: characteristics,
+			mdocChar: .readerIdent,
+			properties: readerIdentityProperties,
+			description: "read"
+		) {
 			peripheral.readValue(for: readerIdent)
 		}
 		let negotiatedMaximumCharacteristicSize = peripheral.maximumWriteValueLength(for: .withoutResponse)
@@ -160,9 +192,15 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		tryStartRequestIfReady()
 	}
 
-	func processData(peripheral: CBPeripheral, characteristic: CBCharacteristic) throws {
+	func processData(
+		peripheral: CBPeripheral,
+		characteristic: CBCharacteristic
+	) throws {
 		if var data = characteristic.value {
-			logger.info("Processing \(data.count) bytes for \(MdocServiceCharacteristic(uuid: characteristic.uuid)?.description ?? characteristic.uuid.uuidString)")
+			let characteristicDescription =
+				MdocServiceCharacteristic(uuid: characteristic.uuid)?.description
+				?? characteristic.uuid.uuidString
+			logger.info("Processing \(data.count) bytes for \(characteristicDescription)")
 			switch characteristic.uuid {
 			case MdocServiceCharacteristic.state.uuid:
 				if data.count != 1 {
@@ -212,7 +250,12 @@ extension MdocGattCentral: CBCentralManagerDelegate {
 		}
 	}
 
-	public func centralManager(_: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData _: [String: Any], rssi _: NSNumber) {
+	public func centralManager(
+		_: CBCentralManager,
+		didDiscover peripheral: CBPeripheral,
+		advertisementData _: [String: Any],
+		rssi _: NSNumber
+	) {
 		logger.info("Discovered peripheral")
 		peripheral.delegate = self
 		self.peripheral = peripheral
@@ -259,7 +302,11 @@ extension MdocGattCentral: CBPeripheralDelegate {
 		}
 	}
 
-	public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error _: Error?) {
+	public func peripheral(
+		_ peripheral: CBPeripheral,
+		didUpdateValueFor characteristic: CBCharacteristic,
+		error _: Error?
+	) {
 		do {
 			try processData(peripheral: peripheral, characteristic: characteristic)
 		} catch {

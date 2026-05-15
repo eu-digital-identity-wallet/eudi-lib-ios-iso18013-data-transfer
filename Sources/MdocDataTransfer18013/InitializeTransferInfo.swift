@@ -4,7 +4,19 @@ import MdocSecurity18013
 
 public struct InitializeTransferData: Sendable {
 
-	public init(dataFormats: [String: String], documentData: [String: Data], documentKeyIndexes: [String: Int], docMetadata: [String: Data?], docDisplayNames: [String: [String: [String: String]]?], docKeyInfos: [String: Data?], iaca: [x5chain], deviceAuthMethod: String, idsToDocTypes: [String: String], hashingAlgs: [String: String], zkSystemRepository: ZkSystemRepository? = nil) {
+    public init(
+        dataFormats: [String: String],
+        documentData: [String: Data],
+        documentKeyIndexes: [String: Int],
+        docMetadata: [String: Data?],
+        docDisplayNames: [String: [String: [String: String]]?],
+        docKeyInfos: [String: Data?],
+        iaca: [x5chain],
+        deviceAuthMethod: String,
+        idsToDocTypes: [String: String],
+        hashingAlgs: [String: String],
+        zkSystemRepository: ZkSystemRepository? = nil
+    ) {
         self.dataFormats = dataFormats
         self.documentData = documentData
 		self.documentKeyIndexes = documentKeyIndexes
@@ -42,12 +54,30 @@ public struct InitializeTransferData: Sendable {
 
 	public func toInitializeTransferInfo() async throws -> InitializeTransferInfo {
         // filter data and private keys by format
-		let privateKeyObjects: [String: CoseKeyPrivate] = try await MdocHelpers.getPrivateKeys(docKeyInfos, documentKeyIndexes)
+        let keyInfosByDocument = docKeyInfos
+        let privateKeyObjects: [String: CoseKeyPrivate] = try await MdocHelpers.getPrivateKeys(
+            keyInfosByDocument,
+            documentKeyIndexes
+        )
 		let documentObjects = documentData
 		let docMetadata = docMetadata.compactMapValues { $0 }
-		let dataFormats = Dictionary(uniqueKeysWithValues: dataFormats.map { k,v in (k, DocDataFormat(rawValue: v)) }).compactMapValues { $0 }
+        let dataFormatPairs = dataFormats.map { key, value in
+            (key, DocDataFormat(rawValue: value))
+        }
+        let resolvedDataFormats = Dictionary(uniqueKeysWithValues: dataFormatPairs).compactMapValues { $0 }
         let deviceAuthMethod = DeviceAuthMethod(rawValue: deviceAuthMethod) ?? .deviceMac
-		return InitializeTransferInfo(dataFormats: dataFormats, documentObjects: documentObjects, docMetadata: docMetadata, docDisplayNames: docDisplayNames, privateKeyObjects: privateKeyObjects, iaca: iaca, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: hashingAlgs, zkSystemRepository: zkSystemRepository)
+        return InitializeTransferInfo(
+            dataFormats: resolvedDataFormats,
+            documentObjects: documentObjects,
+            docMetadata: docMetadata,
+            docDisplayNames: docDisplayNames,
+            privateKeyObjects: privateKeyObjects,
+            iaca: iaca,
+            deviceAuthMethod: deviceAuthMethod,
+            idsToDocTypes: idsToDocTypes,
+            hashingAlgs: hashingAlgs,
+            zkSystemRepository: zkSystemRepository
+        )
     }
 }
 

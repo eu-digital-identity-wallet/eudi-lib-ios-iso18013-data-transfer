@@ -20,7 +20,9 @@ import Foundation
 import SwiftCBOR
 /// The enum BleTransferMode defines the two roles in the communication, which can be a server or a client.
 ///
-/// The four static variables are used to signal the start and the end of the communication. This is done by sending the bytes 0x01 and 0x02 for the start and end of the communication, respectively. For the start and end of the data transmission, the bytes 0x01 and 0x00 are used.
+/// The four static variables are used to signal the start and end of communication.
+/// This is done by sending bytes 0x01 and 0x02 for start and end.
+/// For start and end of data transmission, bytes 0x01 and 0x00 are used.
 public enum BleTransferMode: Sendable {
 	case server
 	case client

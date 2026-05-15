@@ -17,7 +17,11 @@ import Foundation
 import MdocDataModel18013
 
 public struct UserRequestInfo : Sendable {
-	public init(docDataFormats: [String: DocDataFormat], itemsRequested: RequestItems, deviceRequestBytes: Data? = nil) {
+	public init(
+		docDataFormats: [String: DocDataFormat],
+		itemsRequested: RequestItems,
+		deviceRequestBytes: Data? = nil
+	) {
 		self.docDataFormats = docDataFormats
 		self.itemsRequested = itemsRequested
 		self.deviceRequestBytes = deviceRequestBytes

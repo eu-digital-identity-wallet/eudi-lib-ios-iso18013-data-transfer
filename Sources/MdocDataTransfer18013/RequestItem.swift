@@ -17,7 +17,11 @@ import Foundation
 
 /// A structure representing a request item for data transfer.
 public struct RequestItem: Equatable, Hashable, Sendable {
-	public init(elementPath: [String], intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
+	public init(
+		elementPath: [String],
+		intentToRetain: Bool? = nil,
+		isOptional: Bool? = nil
+	) {
 		self.elementPath = elementPath
 		self.intentToRetain = intentToRetain
 		self.isOptional = isOptional
@@ -52,16 +56,33 @@ public struct RequestItem: Equatable, Hashable, Sendable {
 
 extension RequestItem {
 	public init(elementPath: [String]) {
-		self.init(elementPath: elementPath, intentToRetain: nil, isOptional: nil)
+		self.init(
+			elementPath: elementPath,
+			intentToRetain: nil,
+			isOptional: nil
+		)
 	}
 
 	public init(elementIdentifier: String) {
 		let elementPath = elementIdentifier.components(separatedBy: ".")
-		self.init(elementPath: elementPath, intentToRetain: nil, isOptional: nil)
+		self.init(
+			elementPath: elementPath,
+			intentToRetain: nil,
+			isOptional: nil
+		)
 	}
 
-	public init(elementIdentifier: String, intentToRetain: Bool? = nil, isOptional: Bool? = nil) {
-		self.init(elementPath: elementIdentifier.components(separatedBy: "."), intentToRetain: intentToRetain, isOptional: isOptional)
+	public init(
+		elementIdentifier: String,
+		intentToRetain: Bool? = nil,
+		isOptional: Bool? = nil
+	) {
+		let elementPathComponents = elementIdentifier.components(separatedBy: ".")
+		self.init(
+			elementPath: elementPathComponents,
+			intentToRetain: intentToRetain,
+			isOptional: isOptional
+		)
 	}
 
 }

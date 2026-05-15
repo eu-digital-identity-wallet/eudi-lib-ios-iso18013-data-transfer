@@ -32,7 +32,14 @@ public struct ReaderAuthenticationResult: Sendable {
 	/// certificate chain (base64 pem encoded)
 	public let certificateChain: [Data]?
 
-    public init(isValidated: Bool, certificateIssuer: String? = nil, validationMessage: String? = nil, legalName: String? = nil, authBytes: Data? = nil, certificateChain: [Data]? = nil) {
+	public init(
+		isValidated: Bool,
+		certificateIssuer: String? = nil,
+		validationMessage: String? = nil,
+		legalName: String? = nil,
+		authBytes: Data? = nil,
+		certificateChain: [Data]? = nil
+	) {
         self.isValidated = isValidated
         self.certificateIssuer = certificateIssuer
         self.validationMessage = validationMessage
