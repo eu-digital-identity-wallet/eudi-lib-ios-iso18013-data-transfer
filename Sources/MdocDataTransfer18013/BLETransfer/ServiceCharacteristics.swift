@@ -19,6 +19,7 @@ import Foundation
 import CoreBluetooth
 import SwiftCBOR
 
+#if !os(watchOS)
 extension MdocGattServer {
 	/// mdoc service characteristic definitions (mdoc is the GATT server)
 	public enum MdocServiceCharacteristic: String, CustomStringConvertible, Sendable {
@@ -38,6 +39,7 @@ extension MdocGattServer {
 		var uuid: CBUUID { CBUUID(string: rawValue) }
 	}
 }
+#endif
 
 extension MdocGattCentral {
 	/// mdoc service characteristic definitions (mdoc is the GATT server)
