@@ -227,17 +227,18 @@ public class MdocHelpers {
 	/// - Returns: (Device response object, valid requested items, error request items) tuple
 	public static func getDeviceResponseToSend(
 		deviceRequest: DeviceRequest?,
-		issuerSigned: [String: IssuerSigned],
-		docMetadata: [String: Data],
+		issuerSigned: [DocType: IssuerSigned],
+		docMetadata: [DocType: Data],
 		selectedItems: RequestItems? = nil,
 		sessionEncryption: SessionEncryption? = nil,
 		eReaderKey: CoseKey? = nil,
-		privateKeyObjects: [String: CoseKeyPrivate],
+		privateKeyObjects: [DocType: CoseKeyPrivate],
 		sessionTranscript: SessionTranscript? = nil,
 		dauthMethod: DeviceAuthMethod,
-		unlockData: [String: Data],
+		unlockData: [DocType: Data],
 		zkSpecsRequested: [DocType: [ZkSystemSpec]]? = nil,
-		zkSystemRepository: ZkSystemRepository? = nil
+		zkSystemRepository: ZkSystemRepository? = nil,
+		deviceNameSpacesRequested: [DocType: DeviceNameSpaces]? = nil
 	) async throws -> (
 		deviceResponse: DeviceResponse,
 		validRequestItems: RequestItems,
@@ -376,13 +377,44 @@ public class MdocHelpers {
 				)
 				var devSignedToAdd: DeviceSigned? = nil
 				if let sessionTranscript, let privateKeyObject {
+					let deviceNameSpacesToAdd = deviceNameSpacesRequested?[reqDocIdOrDocType]
+					if let deviceNameSpacesToAdd {
+						let keyAuthorizations = issuerAuthToAdd.mso.deviceKeyInfo.keyAuthorizations
+						
+						for (_, element) in deviceNameSpacesToAdd.deviceNameSpaces.enumerated() {
+							let namespace = element.key
+							let deviceSignedItems = element.value
+							
+							// Check if issuer auth authorizes entire namespace
+							if (keyAuthorizations?.nameSpaces?.contains(namespace) == true) {
+								continue
+							}
+							
+							// Check if issuer auth authorizes all device signed items
+							for deviceSignedItem in deviceSignedItems.deviceSignedItems {
+								if (keyAuthorizations?.dataElements?.contains(where: { $0.key == namespace && $0.value.contains(deviceSignedItem.key)}) != true) {
+									logger.error(
+										"Requested device namespace is not authorized by issuer auth",
+										metadata: [
+											"reqDocIdOrDocType": .string(reqDocIdOrDocType),
+											"deviceNameSpace": .string(namespace),
+											"deviceSignedItem": .string(deviceSignedItem.key)
+										]
+									)
+									
+									return nil
+								}
+							}
+						}
+					}
 					let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: privateKeyObject)
 					let mdocAuth = MdocAuthentication(sessionTranscript: sessionTranscript, authKeys: authKeys)
 					let unlockPayload = unlockData[reqDocIdOrDocType]
 					guard let devAuth = try await mdocAuth.getDeviceAuthForTransfer(
 						docType: documentToRespond.issuerAuth.mso.docType,
 						dauthMethod: dauthMethod,
-						unlockData: unlockPayload
+						deviceNameSpaces: deviceNameSpacesToAdd,
+						unlockData: unlockPayload,
 					) else {
 						logger.error("Cannot create device auth"); return nil
 					}
