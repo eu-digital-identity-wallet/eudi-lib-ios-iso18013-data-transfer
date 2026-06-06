@@ -30,6 +30,7 @@ import X509
 import SwiftyJSON
 
 public typealias RequestItems = [DocType: [NameSpace: [RequestItem]]]
+public typealias RequestDeviceNameSpaces = [DocType: DeviceNameSpaces]
 /// Per doc type, transaction data type with parameters
 public typealias RequestTransactionData = [DocType: [String: JSON]]
 /// Per doc type, verifier info format with data
@@ -243,7 +244,7 @@ public class MdocHelpers {
 		unlockData: [DocType: Data],
 		zkSpecsRequested: [DocType: [ZkSystemSpec]]? = nil,
 		zkSystemRepository: ZkSystemRepository? = nil,
-		deviceNameSpacesRequested: [DocType: DeviceNameSpaces]? = nil
+		deviceNameSpacesRequested: RequestDeviceNameSpaces? = nil
 	) async throws -> (
 		deviceResponse: DeviceResponse,
 		validRequestItems: RequestItems,
