@@ -30,6 +30,8 @@ import X509
 
 public typealias RequestItems = [DocType: [NameSpace: [RequestItem]]]
 
+public typealias RequestTransactionData = [DocType: RequestTransactionDataItem]
+
 /// Helper methods
 public class MdocHelpers {
 
