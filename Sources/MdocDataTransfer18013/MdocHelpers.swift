@@ -424,7 +424,7 @@ public class MdocHelpers {
 					) else {
 						logger.error("Cannot create device auth"); return nil
 					}
-					devSignedToAdd = DeviceSigned(deviceAuth: devAuth)
+					devSignedToAdd = DeviceSigned(deviceAuth: devAuth, deviceNameSpaces: deviceNameSpacesToAdd)
 				}
 				guard let devSignedToAdd else { logger.error("Cannot create device signed"); continue }
 				let docToAdd = Document(
