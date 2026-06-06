@@ -27,10 +27,13 @@ import AVFoundation
 import SwiftCBOR
 import Logging
 import X509
+import SwiftyJSON
 
 public typealias RequestItems = [DocType: [NameSpace: [RequestItem]]]
-
-public typealias RequestTransactionData = [DocType: RequestTransactionDataItem]
+/// Per doc type, transaction data type with parameters
+public typealias RequestTransactionData = [DocType: [String: JSON]]
+/// Per doc type, verifier info format with data
+public typealias RequestVerifierInfo = [DocType: [String: JSON]]
 
 /// Helper methods
 public class MdocHelpers {

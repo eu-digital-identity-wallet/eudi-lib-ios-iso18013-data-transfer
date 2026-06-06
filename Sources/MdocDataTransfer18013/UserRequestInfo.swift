@@ -23,7 +23,7 @@ public struct UserRequestInfo: Sendable {
 		itemsRequested: RequestItems,
 		deviceRequestBytes: Data? = nil,
 		transactionDataRequested: RequestTransactionData? = nil,
-		verifierInfo: [DocType: [String: JSON]]? = nil
+		verifierInfo: RequestVerifierInfo? = nil
 	) {
 		self.docDataFormats = docDataFormats
 		self.itemsRequested = itemsRequested
@@ -42,7 +42,7 @@ public struct UserRequestInfo: Sendable {
 	/// transaction data requested
 	public var transactionDataRequested: RequestTransactionData?
 	/// verifier info for items requested (format and data)
-	public var verifierInfo: [DocType: [String: JSON]]?
+	public var verifierInfo: RequestVerifierInfo?
 
 	/// default reader authentication result (if docType specific result is not available)
 	public var defaultReaderAuthResult: ReaderAuthenticationResult? {
