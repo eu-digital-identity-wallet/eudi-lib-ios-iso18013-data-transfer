@@ -45,7 +45,7 @@ public class MdocHelpers {
 			"key": Self.errorNoDocumentsDescriptionKey,
 			"%s": docType
 		]
-		return NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: userInfo)
+		return NSError(domain: "MdocHelpers", code: 0, userInfo: userInfo)
 	}
 
 	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
@@ -55,7 +55,7 @@ public class MdocHelpers {
 			NSLocalizedDescriptionKey: errorMessage,
 			"key": code.description
 		]
-		return NSError(domain: "\(MdocGattServer.self)", code: code.rawValue, userInfo: userInfo)
+		return NSError(domain: "MdocHelpers", code: code.rawValue, userInfo: userInfo)
 	}
 
 	/// Get the session data to send to the reader. The session data is encrypted using the session encryption object

@@ -7,7 +7,7 @@
       "location" : "https://github.com/beyonkuhre/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "feat/key-authorizations",
-        "revision" : "dddf6938dbb69a814542ce14071f9365dc1d507d"
+        "revision" : "80cbfe9866da7d5ae39b3a96f9ed9eda48e2173c"
       }
     },
     {
@@ -16,7 +16,7 @@
       "location" : "https://github.com/beyonkuhre/eudi-lib-ios-iso18013-security",
       "state" : {
         "branch" : "feat/update-package-internal",
-        "revision" : "e3c398c865af485a060a03a846d52c75d8501148"
+        "revision" : "7c36a80bd9c1d65409ec0d711bf861acb53aa344"
       }
     },
     {
