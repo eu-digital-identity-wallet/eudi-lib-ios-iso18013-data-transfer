@@ -233,16 +233,16 @@ public class MdocHelpers {
 	/// - Returns: (Device response object, valid requested items, error request items) tuple
 	public static func getDeviceResponseToSend(
 		deviceRequest: DeviceRequest?,
-		issuerSigned: [DocType: IssuerSigned],
-		docMetadata: [DocType: Data],
+		issuerSigned: [String: IssuerSigned],
+		docMetadata: [String: Data],
 		selectedItems: RequestItems? = nil,
 		sessionEncryption: SessionEncryption? = nil,
 		eReaderKey: CoseKey? = nil,
-		privateKeyObjects: [DocType: CoseKeyPrivate],
+		privateKeyObjects: [String: CoseKeyPrivate],
 		sessionTranscript: SessionTranscript? = nil,
 		dauthMethod: DeviceAuthMethod,
-		unlockData: [DocType: Data],
-		zkSpecsRequested: [DocType: [ZkSystemSpec]]? = nil,
+		unlockData: [String: Data],
+		zkSpecsRequested: [String: [ZkSystemSpec]]? = nil,
 		zkSystemRepository: ZkSystemRepository? = nil,
 		deviceNameSpacesRequested: RequestDeviceNameSpaces? = nil
 	) async throws -> (
