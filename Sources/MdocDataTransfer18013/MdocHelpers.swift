@@ -385,17 +385,14 @@ public class MdocHelpers {
 				if let sessionTranscript, let privateKeyObject {
 					let deviceNameSpacesToAdd = deviceNameSpacesRequested?[reqDocIdOrDocType]
 					if let deviceNameSpacesToAdd {
-						let keyAuthorizations = issuerAuthToAdd.mso.deviceKeyInfo.keyAuthorizations
-						
+						let keyAuthorizations = issuerAuthToAdd.mso.deviceKeyInfo.keyAuthorizations					
 						for (_, element) in deviceNameSpacesToAdd.deviceNameSpaces.enumerated() {
 							let namespace = element.key
 							let deviceSignedItems = element.value
-							
 							// Check if issuer auth authorizes entire namespace
 							if (keyAuthorizations?.nameSpaces?.contains(namespace) == true) {
 								continue
 							}
-							
 							// Check if issuer auth authorizes all device signed items
 							for deviceSignedItem in deviceSignedItems.deviceSignedItems {
 								if (keyAuthorizations?.dataElements?.contains(where: { $0.key == namespace && $0.value.contains(deviceSignedItem.key)}) != true) {
@@ -407,7 +404,6 @@ public class MdocHelpers {
 											"deviceSignedItem": .string(deviceSignedItem.key)
 										]
 									)
-									
 									return nil
 								}
 							}
