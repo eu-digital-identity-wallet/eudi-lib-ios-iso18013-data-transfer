@@ -242,7 +242,7 @@ public class MdocHelpers {
 		sessionTranscript: SessionTranscript? = nil,
 		dauthMethod: DeviceAuthMethod,
 		unlockData: [String: Data],
-		zkSpecsRequested: [String: [ZkSystemSpec]]? = nil,
+		zkSpecsRequested: [DocType: [ZkSystemSpec]]? = nil,
 		zkSystemRepository: ZkSystemRepository? = nil,
 		deviceNameSpacesRequested: RequestDeviceNameSpaces? = nil
 	) async throws -> (
