@@ -15,16 +15,21 @@ limitations under the License.
 */
 import Foundation
 import MdocDataModel18013
+@preconcurrency import SwiftyJSON
 
-public struct UserRequestInfo : Sendable {
+public struct UserRequestInfo: Sendable {
 	public init(
 		docDataFormats: [String: DocDataFormat],
 		itemsRequested: RequestItems,
-		deviceRequestBytes: Data? = nil
+		deviceRequestBytes: Data? = nil,
+		transactionDataRequested: RequestTransactionData? = nil,
+		verifierInfo: RequestVerifierInfo? = nil
 	) {
 		self.docDataFormats = docDataFormats
 		self.itemsRequested = itemsRequested
 		self.deviceRequestBytes = deviceRequestBytes
+		self.transactionDataRequested = transactionDataRequested
+		self.verifierInfo = verifierInfo
 	}
 	/// device request bytes (encoded cbor)
 	public var deviceRequestBytes: Data?
@@ -34,6 +39,10 @@ public struct UserRequestInfo : Sendable {
 	public var itemsRequested: RequestItems
 	/// reader Authentication results (per doc type)
 	public var readerAuthResults: [DocType: ReaderAuthenticationResult] = [:]
+	/// transaction data requested
+	public var transactionDataRequested: RequestTransactionData?
+	/// verifier info for items requested (format and data)
+	public var verifierInfo: RequestVerifierInfo?
 
 	/// default reader authentication result (if docType specific result is not available)
 	public var defaultReaderAuthResult: ReaderAuthenticationResult? {
