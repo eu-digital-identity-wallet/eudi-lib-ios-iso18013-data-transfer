@@ -23,13 +23,15 @@ public struct UserRequestInfo: Sendable {
 		itemsRequested: RequestItems,
 		deviceRequestBytes: Data? = nil,
 		transactionDataRequested: RequestTransactionData? = nil,
-		verifierInfo: RequestVerifierInfo? = nil
+		verifierInfo: RequestVerifierInfo? = nil,
+		requestName: String? = nil
 	) {
 		self.docDataFormats = docDataFormats
 		self.itemsRequested = itemsRequested
 		self.deviceRequestBytes = deviceRequestBytes
 		self.transactionDataRequested = transactionDataRequested
 		self.verifierInfo = verifierInfo
+		self.requestName = requestName
 	}
 	/// device request bytes (encoded cbor)
 	public var deviceRequestBytes: Data?
@@ -43,6 +45,8 @@ public struct UserRequestInfo: Sendable {
 	public var transactionDataRequested: RequestTransactionData?
 	/// verifier info for items requested (format and data)
 	public var verifierInfo: RequestVerifierInfo?
+	/// optional request name
+	public var requestName: String?
 
 	/// default reader authentication result (if docType specific result is not available)
 	public var defaultReaderAuthResult: ReaderAuthenticationResult? {
