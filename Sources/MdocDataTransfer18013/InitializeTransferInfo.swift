@@ -15,6 +15,8 @@ public struct InitializeTransferData: Sendable {
         deviceAuthMethod: String,
         idsToDocTypes: [String: String],
         hashingAlgs: [String: String],
+		bleTransferMode: BleTransferMode,
+		crlRevocationPolicy: RevocationPolicy,
         zkSystemRepository: ZkSystemRepository? = nil
     ) {
         self.dataFormats = dataFormats
@@ -27,6 +29,8 @@ public struct InitializeTransferData: Sendable {
         self.deviceAuthMethod = deviceAuthMethod
         self.idsToDocTypes = idsToDocTypes
 		self.hashingAlgs = hashingAlgs
+		self.bleTransferMode = bleTransferMode
+		self.crlRevocationPolicy = crlRevocationPolicy
         self.zkSystemRepository = zkSystemRepository
     }
     /// doc-id to data format
@@ -49,6 +53,10 @@ public struct InitializeTransferData: Sendable {
     public let idsToDocTypes: [String: String]
 	/// document-id to hashing algorithm
 	var hashingAlgs: [String: String]
+	/// BLE transfer mode
+	public let bleTransferMode: BleTransferMode
+	/// CRL revocation policy
+	public let crlRevocationPolicy: RevocationPolicy
     // optional zk system repository
     public let zkSystemRepository: ZkSystemRepository?
 
