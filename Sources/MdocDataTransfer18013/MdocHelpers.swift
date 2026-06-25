@@ -105,6 +105,7 @@ public class MdocHelpers {
 		requestData: Data,
 		privateKeyObjects: [String: CoseKeyPrivate],
 		dauthMethod: DeviceAuthMethod,
+		crlRevocationPolicy: RevocationPolicy,
 		unlockData: [String: Data],
 		readerKeyRawData: [UInt8]?,
 		handOver: CBOR
@@ -174,7 +175,8 @@ public class MdocHelpers {
 								readerAuthCBOR: readerAuthRawCBOR,
 								readerAuthX5c: certData,
 								itemsRequestRawData: itemsRequestRawData,
-								rootIaca: iaca
+								rootIaca: iaca,
+								crlRevocationPolicy: crlRevocationPolicy
 							)
 							readerValidation = ReaderAuthenticationResult(
 								isValidated: isValidated,

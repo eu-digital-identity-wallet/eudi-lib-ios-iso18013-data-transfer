@@ -59,7 +59,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		status = .initialized
 		initPeripheralManager()
 	}
-	
+
 	@objc(CBPeripheralManagerDelegate)
 	class Delegate: NSObject, CBPeripheralManagerDelegate {
 		unowned var server: MdocGattServer
@@ -87,7 +87,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 				stateDescription = "Powered off"
 			}
 			logger.info("CBPeripheralManager didUpdateState: \(stateDescription)")
-			if peripheral.state == .poweredOn { 
+			if peripheral.state == .poweredOn {
 				server.delegate?.didPoweredOn(isPeripheralManager: true)
 				server.status = .poweredOn
 			}
@@ -102,6 +102,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 					server.readBuffer.removeAll()
 				} else if stateByte == BleTransferMode.END_REQUEST.first! {
 					logger.info("End received to state characteristic (status: \(server.status))") // --> end
+					Task { [weak server] in await server?.deleteEphemeralSessionKey() }
 					server.status = .disconnected
 				}
 			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
@@ -231,7 +232,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	}
 
 	public var isAuthorized: Bool { peripheralManager.state != .unauthorized }
-	
+
 	public func stopBleAdvertising() {
 		if let peripheralManager, peripheralManager.isAdvertising {
 			peripheralManager.stopAdvertising()
@@ -239,16 +240,18 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		advertising = false
 	}
 
-	public func stop() {
+	func deleteEphemeralSessionKey() async {
+		if let pk = sessionDelegate.deviceEngagement?.privateKey {
+			try? await pk.secureArea.deleteKeyBatch(id: pk.privateKeyId, startIndex: 0, batchSize: 1)
+			sessionDelegate.deviceEngagement?.privateKey = nil
+		}
+}
+
+public func stop() {
 		stopBleAdvertising()
 		sessionDelegate.qrCodePayload = nil
 		subscribeCount = 0
-		if let pk = sessionDelegate.deviceEngagement?.privateKey {
-			Task { @MainActor in
-				try? await pk.secureArea.deleteKeyBatch(id: pk.privateKeyId, startIndex: 0, batchSize: 1)
-				sessionDelegate.deviceEngagement?.privateKey = nil
-			}
-		}
+		Task { [weak self] in await self?.deleteEphemeralSessionKey() }
 		if status == .error {
 			status = .initializing
 		}
@@ -303,4 +306,4 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 
 }
 
-#endif	
+#endif
