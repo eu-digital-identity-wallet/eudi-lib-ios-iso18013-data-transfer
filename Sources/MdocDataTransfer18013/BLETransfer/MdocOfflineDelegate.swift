@@ -12,7 +12,7 @@ public protocol MdocOfflineDelegate: AnyObject {
 	var sessionEncryption: SessionEncryption? { get set }
 	var docs: [String: IssuerSigned]! { get set }
 	var docMetadata: [String: Data?]! { get set }
-	var iaca: [x5chain]! { get set }
+	var trustValidator: any CertificateTrustValidator { get set }
 	var privateKeyObjects: [String: CoseKeyPrivate]! { get set }
 	var dauthMethod: DeviceAuthMethod { get set }
 	var zkSystemRepository: ZkSystemRepository? { get set }
