@@ -11,12 +11,11 @@ public struct InitializeTransferData: Sendable {
         docMetadata: [String: Data?],
         docDisplayNames: [String: [String: [String: String]]?],
         docKeyInfos: [String: Data?],
-        iaca: [x5chain],
+		trustValidator: any CertificateTrustValidator,
         deviceAuthMethod: String,
         idsToDocTypes: [String: String],
         hashingAlgs: [String: String],
 		bleTransferMode: BleTransferMode,
-		crlRevocationPolicy: RevocationPolicy,
         zkSystemRepository: ZkSystemRepository? = nil
     ) {
         self.dataFormats = dataFormats
@@ -25,12 +24,11 @@ public struct InitializeTransferData: Sendable {
 		self.docMetadata = docMetadata
 		self.docDisplayNames = docDisplayNames
         self.docKeyInfos = docKeyInfos
-        self.iaca = iaca
+        self.trustValidator = trustValidator
         self.deviceAuthMethod = deviceAuthMethod
         self.idsToDocTypes = idsToDocTypes
 		self.hashingAlgs = hashingAlgs
 		self.bleTransferMode = bleTransferMode
-		self.crlRevocationPolicy = crlRevocationPolicy
         self.zkSystemRepository = zkSystemRepository
     }
     /// doc-id to data format
@@ -46,7 +44,7 @@ public struct InitializeTransferData: Sendable {
     /// doc-id to private key info
     public let docKeyInfos: [String: Data?]
     /// trusted certificates
-    public let iaca: [x5chain]
+    public let trustValidator: any CertificateTrustValidator
     /// device auth method
     public let deviceAuthMethod: String
     /// document-id to document type map
@@ -55,8 +53,6 @@ public struct InitializeTransferData: Sendable {
 	var hashingAlgs: [String: String]
 	/// BLE transfer mode
 	public let bleTransferMode: BleTransferMode
-	/// CRL revocation policy
-	public let crlRevocationPolicy: RevocationPolicy
     // optional zk system repository
     public let zkSystemRepository: ZkSystemRepository?
 
@@ -80,7 +76,7 @@ public struct InitializeTransferData: Sendable {
             docMetadata: docMetadata,
             docDisplayNames: docDisplayNames,
             privateKeyObjects: privateKeyObjects,
-            iaca: iaca,
+			trustValidator: trustValidator,
             deviceAuthMethod: deviceAuthMethod,
             idsToDocTypes: idsToDocTypes,
             hashingAlgs: hashingAlgs,
@@ -101,7 +97,7 @@ public struct InitializeTransferInfo {
     /// doc-id to private key objects
     public let privateKeyObjects: [String: CoseKeyPrivate]
     /// trusted certificates
-	public let iaca: [x5chain]
+	public let trustValidator: any CertificateTrustValidator
     /// device auth method
     public let deviceAuthMethod: DeviceAuthMethod
 	// document-id to document type map

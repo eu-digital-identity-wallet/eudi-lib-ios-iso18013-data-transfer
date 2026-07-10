@@ -101,11 +101,10 @@ public class MdocHelpers {
 		deviceEngagement: DeviceEngagement?,
 		docs: [String: IssuerSigned],
 		docMetadata: [String: Data],
-		iaca: [x5chain],
+		trustValidator: (any CertificateTrustValidator),
 		requestData: Data,
 		privateKeyObjects: [String: CoseKeyPrivate],
 		dauthMethod: DeviceAuthMethod,
-		crlRevocationPolicy: RevocationPolicy,
 		unlockData: [String: Data],
 		readerKeyRawData: [UInt8]?,
 		handOver: CBOR
@@ -171,12 +170,11 @@ public class MdocHelpers {
 						let certificateIssuer = MdocHelpers.getCN(from: x509.subject.description)
 						do {
 							let itemsRequestRawData = docR.itemsRequestRawData!
-							let (isValidated, validationMessage) = try mdocAuth.validateReaderAuth(
+							let (isValidated, validationMessage) = try await mdocAuth.validateReaderAuth(
 								readerAuthCBOR: readerAuthRawCBOR,
 								readerAuthX5c: certData,
 								itemsRequestRawData: itemsRequestRawData,
-								rootIaca: iaca,
-								crlRevocationPolicy: crlRevocationPolicy
+								trustValidator: trustValidator
 							)
 							readerValidation = ReaderAuthenticationResult(
 								isValidated: isValidated,
