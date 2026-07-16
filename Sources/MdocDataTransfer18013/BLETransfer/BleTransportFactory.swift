@@ -30,6 +30,9 @@ public protocol BleTransportFactory: Sendable {
 	func createClient() -> any MdocBleTransport
 }
 
+extension MdocBleTransport {
+	public func awaitPsmChannel() async -> UInt16? { nil }
+}
 /// Default factory that creates standard GATT server and central transports.
 public struct DefaultBleTransportFactory: BleTransportFactory {
 	public init() {}
