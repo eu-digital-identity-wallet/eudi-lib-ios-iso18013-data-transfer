@@ -68,7 +68,8 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	public var isAuthorized: Bool {
 		centralManager.state != .unauthorized
 	}
-
+	public var supportsL2cap: Bool { false }
+	
 	private func handleCentralPoweredOn() {
 		delegate?.didPoweredOn(isPeripheralManager: false)
 		status = .poweredOn

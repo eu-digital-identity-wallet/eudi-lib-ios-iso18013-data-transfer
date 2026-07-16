@@ -27,6 +27,8 @@ public protocol MdocOfflineDelegate: AnyObject {
 	func didReceiveRequest(_ data: Data)
 	func didPoweredOn(isPeripheralManager: Bool)
 	func didConnected(isPeripheral: Bool, deviceName: String?)
+	 /// Called by the wallet to set the PSM channel number for L2CAP mode.
+	func didPublishedPsmChannel(psm: UInt16?)
 }
 
 
