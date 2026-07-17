@@ -24,8 +24,10 @@ import Foundation
 /// The wallet calls ``createServer()`` or ``createClient()`` depending on the
 /// configured ``BleTransferMode``. When the mode is `.both`, both methods are called.
 public protocol BleTransportFactory: Sendable {
+	#if !os(watchOS)
 	/// Create a transport for the peripheral server role (GATT server).
 	func createServer() -> any MdocBleTransport
+	#endif
 	/// Create a transport for the central client role (GATT central).
 	func createClient() -> any MdocBleTransport
 }
@@ -33,7 +35,9 @@ public protocol BleTransportFactory: Sendable {
 /// Default factory that creates standard GATT server and central transports.
 public struct DefaultBleTransportFactory: BleTransportFactory {
 	public init() {}
+	#if !os(watchOS)
 	public func createServer() -> any MdocBleTransport { MdocGattServer() }
+	#endif
 	public func createClient() -> any MdocBleTransport { MdocGattCentral() }
 }
 
