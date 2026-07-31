@@ -167,7 +167,9 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 
 	/// Returns true if the peripheralManager state is poweredOn
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
-
+	
+	public var supportsL2cap: Bool { false }
+	
 	func buildServices(uuid: String) {
 		let bleUserService = CBMutableService(type: CBUUID(string: uuid), primary: true)
 		let stateProperties: CBCharacteristicProperties = [.notify, .writeWithoutResponse]

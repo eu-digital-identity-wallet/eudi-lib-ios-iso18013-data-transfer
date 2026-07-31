@@ -101,11 +101,10 @@ public class MdocHelpers {
 		deviceEngagement: DeviceEngagement?,
 		docs: [String: IssuerSigned],
 		docMetadata: [String: Data],
-		iaca: [x5chain],
+		trustValidator: (any CertificateTrustValidator),
 		requestData: Data,
 		privateKeyObjects: [String: CoseKeyPrivate],
 		dauthMethod: DeviceAuthMethod,
-		crlRevocationPolicy: RevocationPolicy,
 		unlockData: [String: Data],
 		readerKeyRawData: [UInt8]?,
 		handOver: CBOR
@@ -159,7 +158,8 @@ public class MdocHelpers {
 			var userRequestInfo = UserRequestInfo(
 				docDataFormats: requestedDocDataFormats,
 				itemsRequested: validRequestItems,
-				deviceRequestBytes: Data(requestData)
+				deviceRequestBytes: Data(requestData),
+				requestName: "BLE"
 			)
 			for docR in deviceRequest.docRequests {
 				let mdocAuth = MdocReaderAuthentication(transcript: sessionEncryption.sessionTranscript)
@@ -171,12 +171,11 @@ public class MdocHelpers {
 						let certificateIssuer = MdocHelpers.getCN(from: x509.subject.description)
 						do {
 							let itemsRequestRawData = docR.itemsRequestRawData!
-							let (isValidated, validationMessage) = try mdocAuth.validateReaderAuth(
+							let (isValidated, validationMessage) = try await mdocAuth.validateReaderAuth(
 								readerAuthCBOR: readerAuthRawCBOR,
 								readerAuthX5c: certData,
 								itemsRequestRawData: itemsRequestRawData,
-								rootIaca: iaca,
-								crlRevocationPolicy: crlRevocationPolicy
+								trustValidator: trustValidator
 							)
 							readerValidation = ReaderAuthenticationResult(
 								isValidated: isValidated,
@@ -716,7 +715,7 @@ public class MdocHelpers {
 			else { return nil }
 			let secureArea = SecureAreaRegistry.shared.get(name: docKeyInfo.secureAreaName)
 			let (_, curve) = try await secureArea.getInfoAndCurve(id: $0.key)
-			let coseKeyPrivate = try await CoseKeyPrivate(
+			let coseKeyPrivate = CoseKeyPrivate(
 				privateKeyId: $0.key,
 				index: keyIndex,
 				secureArea: secureArea,
