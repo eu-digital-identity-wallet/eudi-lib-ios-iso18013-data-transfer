@@ -1,5 +1,5 @@
 {
-  "originHash" : "739e328e90d7a588b2d74de795697b0b71d7316796940f1b01ff778ae2cd9091",
+  "originHash" : "dc8bcbbc5d87f3ad21a26d5c5ec84462e76a77569f1348ceb2368b94e4d7306e",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "48acc7097528682dd11a2072dc8275d6763fbffb",
-        "version" : "0.27.0"
+        "revision" : "382bf85cb796eaf0dd6cdbbf6d93096447a405a3",
+        "version" : "0.27.1"
       }
     },
     {
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "e06f862771919b49d30ebf6617ebea488fb554ac",
-        "version" : "0.27.0"
+        "revision" : "23500807e3be14de55eaacc01eee06824feb4943",
+        "version" : "0.27.1"
       }
     },
     {
