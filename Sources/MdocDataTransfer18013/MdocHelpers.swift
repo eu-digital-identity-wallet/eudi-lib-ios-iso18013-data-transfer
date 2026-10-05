@@ -94,6 +94,7 @@ public class MdocHelpers {
 	///   - iaca: Root certificates trusted
 	///   - devicePrivateKeys: Device private keys
 	///   - dauthMethod: Method to perform mdoc authentication
+	///   - signatureAlgorithm: Device signature algorithm (defaults to ES256)
 	///   - handOver: handOver structure
 	/// - Returns: A ``DeviceRequest`` object
 
@@ -105,6 +106,7 @@ public class MdocHelpers {
 		requestData: Data,
 		privateKeyObjects: [String: CoseKeyPrivate],
 		dauthMethod: DeviceAuthMethod,
+		signatureAlgorithm: Cose.VerifyAlgorithm = .es256,
 		unlockData: [String: Data],
 		readerKeyRawData: [UInt8]?,
 		handOver: CBOR,
@@ -148,6 +150,7 @@ public class MdocHelpers {
 				eReaderKey: sessionEncryption.sessionKeys.publicKey,
 				privateKeyObjects: privateKeyObjects,
 				dauthMethod: dauthMethod,
+				signatureAlgorithm: signatureAlgorithm,
 				unlockData: unlockData,
 				authenticationContext: authenticationContext
 			)
@@ -233,6 +236,7 @@ public class MdocHelpers {
 	///   - devicePrivateKeys: Device Private keys
 	///   - sessionTranscript: Session Transcript object
 	///   - dauthMethod: Mdoc Authentication method
+	///   - signatureAlgorithm: Device signature algorithm (defaults to ES256)
 	/// - Returns: (Device response object, valid requested items, error request items) tuple
 	public static func getDeviceResponseToSend(
 		deviceRequest: DeviceRequest?,
@@ -244,6 +248,7 @@ public class MdocHelpers {
 		privateKeyObjects: [String: CoseKeyPrivate],
 		sessionTranscript: SessionTranscript? = nil,
 		dauthMethod: DeviceAuthMethod,
+		signatureAlgorithm: Cose.VerifyAlgorithm = .es256,
 		unlockData: [String: Data],
 		zkSpecsRequested: [DocType: [ZkSystemSpec]]? = nil,
 		zkSystemRepository: ZkSystemRepository? = nil,
@@ -419,6 +424,7 @@ public class MdocHelpers {
 					guard let devAuth = try await mdocAuth.getDeviceAuthForTransfer(
 						docType: documentToRespond.issuerAuth.mso.docType,
 						dauthMethod: dauthMethod,
+						signatureAlgorithm: signatureAlgorithm,
 						deviceNameSpaces: deviceNameSpacesToAdd,
 						unlockData: unlockPayload,
 						authenticationContext: authenticationContext,
