@@ -418,6 +418,7 @@ public class MdocHelpers {
 							}
 						}
 					}
+					try await validateDeviceAuthenticationKey(privateKeyObject, method: dauthMethod)
 					let authKeys = CoseKeyExchange(publicKey: eReaderKey, privateKey: privateKeyObject)
 					let mdocAuth = MdocAuthentication(sessionTranscript: sessionTranscript, authKeys: authKeys)
 					let unlockPayload = unlockData[reqDocIdOrDocType]
@@ -751,5 +752,20 @@ public class MdocHelpers {
 extension Optional where Wrapped: Collection {
     public var isNilOrEmpty: Bool {
         return self?.isEmpty ?? true
+    }
+}
+
+
+extension MdocHelpers {
+    /// Require persistent, exclusive credential-key purpose metadata before device authentication.
+    /// Legacy or dual-purpose keys must be replaced with keys provisioned for one method.
+    static func validateDeviceAuthenticationKey(_ key: CoseKeyPrivate, method: DeviceAuthMethod) async throws {
+        let info = try await key.secureArea.getKeyBatchInfo(id: key.privateKeyId)
+        let required: KeyPurpose = method == .deviceSignature ? .signing : .keyAgreement
+        let declarations = [info.keyOptions?.keyPurposes, info.keyPurpose].compactMap { $0 }
+        guard !declarations.isEmpty, declarations.allSatisfy({ $0.count == 1 && $0.first == required }),
+              key.index >= 0, key.index < info.batchSize else {
+            throw makeError(code: .unexpected_error, str: "Credential key must have one purpose matching the device authentication method")
+        }
     }
 }

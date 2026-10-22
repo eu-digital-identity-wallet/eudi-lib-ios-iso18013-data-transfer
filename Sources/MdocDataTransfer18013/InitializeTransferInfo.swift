@@ -57,6 +57,9 @@ public struct InitializeTransferData: Sendable {
     public let zkSystemRepository: ZkSystemRepository?
 
 	public func toInitializeTransferInfo() async throws -> InitializeTransferInfo {
+        guard let deviceAuthMethod = DeviceAuthMethod(rawValue: deviceAuthMethod) else {
+            throw MdocHelpers.makeError(code: .unexpected_error, str: "Unsupported device authentication method")
+        }
         // filter data and private keys by format
         let keyInfosByDocument = docKeyInfos
         let privateKeyObjects: [String: CoseKeyPrivate] = try await MdocHelpers.getPrivateKeys(
@@ -69,7 +72,6 @@ public struct InitializeTransferData: Sendable {
             (key, DocDataFormat(rawValue: value))
         }
         let resolvedDataFormats = Dictionary(uniqueKeysWithValues: dataFormatPairs).compactMapValues { $0 }
-        let deviceAuthMethod = DeviceAuthMethod(rawValue: deviceAuthMethod) ?? .deviceMac
         return InitializeTransferInfo(
             dataFormats: resolvedDataFormats,
             documentObjects: documentObjects,
