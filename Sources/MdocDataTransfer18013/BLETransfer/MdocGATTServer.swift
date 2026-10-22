@@ -28,7 +28,7 @@ import MdocSecurity18013
 public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	var peripheralManager: CBPeripheralManager!
 	var bleDelegate: Delegate!
-	var remoteCentral: CBCentral!
+	var remoteCentral: CBCentral?
 	var stateCharacteristic: CBMutableCharacteristic!
 	var server2ClientCharacteristic: CBMutableCharacteristic!
 	public weak var delegate: (any MdocOfflineDelegate)?
@@ -50,9 +50,8 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			delegate?.didChangeStatus(status)
 		}
 	}
-	var readBuffer = Data()
-	var sendBuffer = [Data]()
-	var subscribeCount: Int = 0
+		var sendBuffer = [Data]()
+	var peerState = GattPeerState()
 	var initSuccess:Bool = false
 
 	required public init() {
@@ -93,44 +92,46 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			}
 		}
 
-		func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
-			if requests[0].characteristic.uuid == MdocServiceCharacteristic.state.uuid,
-				let stateByte = requests[0].value?.first {
-				if stateByte == BleTransferMode.START_REQUEST.first! {
-					logger.info("Start request received to state characteristic") // --> start
-					server.status = .started
-					server.readBuffer.removeAll()
-				} else if stateByte == BleTransferMode.END_REQUEST.first! {
-					logger.info("End received to state characteristic (status: \(server.status))") // --> end
-					Task { [weak server] in await server?.deleteEphemeralSessionKey() }
-					server.status = .disconnected
-				}
-			} else if requests[0].characteristic.uuid == MdocServiceCharacteristic.client2Server.uuid {
-				for r in requests {
-					guard let data = r.value, let firstByte = data.first else {
-						continue
-					}
-					let isStartBlock = firstByte == BleTransferMode.START_DATA.first!
-					let isEndBlock = firstByte == BleTransferMode.END_DATA.first!
-					if !isStartBlock && !isEndBlock {
-						logger.warning("Not a valid request block: \(data)")
-						peripheral.respond(to: requests[0], withResult: .unlikelyError)
-						return
-					}
-					if data.count > 1 {
-						server.readBuffer.append(data.advanced(by: 1))
-					}
-					if isEndBlock {
-						server.delegate?.didReceiveRequest(server.readBuffer)
-						server.status = .requestReceived
-					}
-				}
-			} else {
-				peripheral.respond(to: requests[0], withResult: .requestNotSupported)
-				return
-			}
-			peripheral.respond(to: requests[0], withResult: .success)
-		}
+        func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+            guard let first = requests.first else { return }
+            guard [.connected, .started, .requestReceived, .userSelected, .responseSent].contains(server.status),
+                  server.peerState.accepts(first.central.identifier) else {
+                peripheral.respond(to: first, withResult: .insufficientAuthorization)
+                return
+            }
+            var writes: [GattPeerState.Write] = []
+            for request in requests {
+                guard request.central.identifier == first.central.identifier,
+                      request.offset == 0, let value = request.value else {
+                    peripheral.respond(to: first, withResult: .unlikelyError)
+                    return
+                }
+                switch request.characteristic.uuid {
+                case MdocServiceCharacteristic.state.uuid: writes.append(.state(value))
+                case MdocServiceCharacteristic.client2Server.uuid: writes.append(.data(value))
+                default:
+                    peripheral.respond(to: first, withResult: .requestNotSupported)
+                    return
+                }
+            }
+            do {
+                let event = try server.peerState.receive(writes, from: first.central.identifier)
+                peripheral.respond(to: first, withResult: .success)
+                switch event {
+                case .started: server.status = .started
+                case .request(let data):
+                    server.status = .requestReceived
+                    server.delegate?.didReceiveRequest(data)
+                case .ended:
+                    server.clearPeer()
+                    Task { [weak server] in await server?.deleteEphemeralSessionKey() }
+                    server.status = .disconnected
+                case nil: break
+                }
+            } catch {
+                peripheral.respond(to: first, withResult: .unlikelyError)
+            }
+        }
 
 		public func peripheralManager(
 			_ peripheral: CBPeripheralManager,
@@ -140,18 +141,18 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			guard server.status == .qrEngagementReady else {
 				return
 			}
-			let mdocCbc = MdocServiceCharacteristic(uuid: characteristic.uuid)
-			logger.info("Remote central \(central.identifier) connected for \(mdocCbc?.rawValue ?? "") characteristic")
-			server.remoteCentral = central
-			let isStateCharacteristic = characteristic.uuid == MdocServiceCharacteristic.state.uuid
-			let isServerToClientCharacteristic = characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid
-			if isStateCharacteristic || isServerToClientCharacteristic {
-				server.subscribeCount += 1
-			}
-			if server.subscribeCount > 1 {
-				server.delegate?.didConnected(isPeripheral: false, deviceName: central.identifier.uuidString)
-				server.status = .connected
-			}
+            let channel: GattPeerState.Channel
+            switch characteristic.uuid {
+            case MdocServiceCharacteristic.state.uuid: channel = .state
+            case MdocServiceCharacteristic.server2Client.uuid: channel = .response
+            default: return
+            }
+            guard server.peerState.subscribe(central.identifier, to: channel) else { return }
+            server.remoteCentral = central
+            if server.peerState.ready {
+                server.status = .connected
+                server.delegate?.didConnected(isPeripheral: false, deviceName: central.identifier.uuidString)
+            }
 		}
 
 		public func peripheralManager(
@@ -159,9 +160,11 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			central: CBCentral,
 			didUnsubscribeFrom characteristic: CBCharacteristic
 		) {
-			let mdocCbc = MdocServiceCharacteristic(uuid: characteristic.uuid)
-			logger.info("Remote central \(central.identifier) disconnected for \(mdocCbc?.rawValue ?? "") characteristic")
-			server.status = .disconnected
+            guard server.peerState.centralID == central.identifier,
+                  characteristic.uuid == MdocServiceCharacteristic.state.uuid ||
+                  characteristic.uuid == MdocServiceCharacteristic.server2Client.uuid else { return }
+            server.clearPeer()
+            server.status = .disconnected
 		}
 	}
 
@@ -211,6 +214,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 				logger.error("BLE initialization error")
 				return
 			}
+			clearPeer()
 			buildServices(uuid: serviceUuid)
 			let advertisedServiceUuids = [CBUUID(string: serviceUuid)]
 			let advertisementData: [String: Any] = [
@@ -252,7 +256,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 public func stop() {
 		stopBleAdvertising()
 		sessionDelegate.qrCodePayload = nil
-		subscribeCount = 0
+		clearPeer()
 		Task { [weak self] in await self?.deleteEphemeralSessionKey() }
 		if status == .error {
 			status = .initializing
@@ -267,7 +271,7 @@ public func stop() {
 		logger.info("Initializing BLE peripheral manager")
 		let managerOptions = [CBPeripheralManagerOptionShowPowerAlertKey: true]
 		peripheralManager = CBPeripheralManager(delegate: bleDelegate, queue: nil, options: managerOptions)
-		subscribeCount = 0
+		clearPeer()
 	}
 
 	var isInErrorState: Bool { status == .error }
@@ -280,32 +284,45 @@ public func stop() {
 		logger.log(level: .error, "Transfer error \(newValue) (\(newValue.localizedDescription)")
 	}
 
-	public func sendData(_ data: Data) {
-			let maxPayloadBlockSize = min(511, remoteCentral.maximumUpdateValueLength - 1)
-			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: maxPayloadBlockSize)
-			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
-				self.sendDataWithUpdates()
-			}
-	}
+    func clearPeer() {
+        remoteCentral = nil
+        peerState.reset()
+        sendBuffer.removeAll()
+    }
 
-	func sendDataWithUpdates() {
-		guard !sendBuffer.isEmpty else {
-			status = .responseSent
-			logger.info("Finished sending BLE data")
-			return
-		}
-		let firstPendingBlock = sendBuffer.first!
-		let isUpdateAccepted = peripheralManager.updateValue(
-			firstPendingBlock,
-			for: server2ClientCharacteristic,
-			onSubscribedCentrals: [remoteCentral]
-		)
-		if isUpdateAccepted, sendBuffer.count > 0 {
-			sendBuffer.removeFirst()
-			sendDataWithUpdates()
-		}
-	}
+    // Allows exercising failure handling without starting a Bluetooth manager.
+    init(peripheralManager: CBPeripheralManager?) {
+        self.peripheralManager = peripheralManager
+        status = .initialized
+    }
 
+    public func sendData(_ data: Data) {
+        guard let central = remoteCentral, peerState.accepts(central.identifier),
+              status == .requestReceived || status == .userSelected,
+              central.maximumUpdateValueLength > 1 else {
+            error = MdocHelpers.makeError(code: .unexpected_error, str: "No subscribed GATT peer for response")
+            return
+        }
+        let maxPayloadBlockSize = min(511, central.maximumUpdateValueLength - 1)
+        sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: maxPayloadBlockSize)
+        let generation = peerState.generation
+        DispatchQueue.main.asyncAfter(deadline: .now()+0.2) { [weak self] in
+            guard let self, self.peerState.generation == generation else { return }
+            self.sendDataWithUpdates()
+        }
+    }
+
+    func sendDataWithUpdates() {
+        guard let central = remoteCentral, peerState.accepts(central.identifier),
+              let peripheralManager, let server2ClientCharacteristic else { return }
+        while let block = sendBuffer.first {
+            guard peripheralManager.updateValue(block, for: server2ClientCharacteristic,
+                                                onSubscribedCentrals: [central]) else { return }
+            sendBuffer.removeFirst()
+        }
+        status = .responseSent
+        logger.info("Finished sending BLE data")
+    }
 }
 
 #endif
