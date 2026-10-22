@@ -48,9 +48,18 @@ public struct UserRequestInfo: Sendable {
 	/// optional request name
 	public var requestName: String?
 
-	/// default reader authentication result (if docType specific result is not available)
+	/// Reader identity shared by the request. A single result (including the request-wide
+	/// OpenID result stored under an empty key) is returned unchanged. Multiple document
+	/// results must all authenticate with the same leaf certificate to share an identity.
 	public var defaultReaderAuthResult: ReaderAuthenticationResult? {
-		readerAuthResults[""] ?? readerAuthResults.first?.value
+		guard let firstKey = readerAuthResults.keys.sorted().first,
+			let result = readerAuthResults[firstKey] else { return nil }
+		if readerAuthResults.count == 1 { return result }
+		guard result.isValidated,
+			let leaf = result.certificateChain?.first, !leaf.isEmpty,
+			readerAuthResults.values.allSatisfy({ $0.isValidated && $0.certificateChain?.first == leaf })
+		else { return nil }
+		return result
 	}
 
 }
