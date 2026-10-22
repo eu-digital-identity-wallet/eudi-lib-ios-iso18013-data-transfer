@@ -231,8 +231,11 @@ public class MdocHelpers {
 	///   - deviceRequest: Device request coming from verifier
 	///   - issuerSigned: Map of document ID to issuerSigned cbor data
 	///   - selectedItems: Selected items from user (Map of Document ID to namespaced items).
-	///     Nil uses the device request. Empty maps or arrays select no elements and never select the whole credential.
-	///     When a device request is supplied, selected elements are also limited to that request.
+	///     Nil uses the device request. By default, empty maps or arrays select no elements.
+	///     Explicitly selected elements are limited to the device request when one is supplied.
+	///   - allowFullDisclosureForEmptySelection: Defaults to false. True restores legacy full-credential disclosure
+	///     for an empty per-document map, ignoring device-request bounds and age-over minimisation for that document.
+	///     An empty outer map or empty namespace arrays still select nothing.
 	///   - sessionEncryption: Session Encryption data structure
 	///   - eReaderKey: eReader (verifier) ephemeral public key
 	///   - devicePrivateKeys: Device Private keys
@@ -245,6 +248,7 @@ public class MdocHelpers {
 		issuerSigned: [String: IssuerSigned],
 		docMetadata: [String: Data],
 		selectedItems: RequestItems? = nil,
+		allowFullDisclosureForEmptySelection: Bool = false,
 		sessionEncryption: SessionEncryption? = nil,
 		eReaderKey: CoseKey? = nil,
 		privateKeyObjects: [String: CoseKeyPrivate],
@@ -279,7 +283,8 @@ public class MdocHelpers {
 		}
 		var docId: String?
 		for reqDocIdOrDocType in reqDocIdsOrDocTypes {
-			if let selection = selectedItems?[reqDocIdOrDocType], selection.values.allSatisfy(\.isEmpty) {
+			let discloseAll = allowFullDisclosureForEmptySelection && selectedItems?[reqDocIdOrDocType]?.isEmpty == true
+			if !discloseAll, let selection = selectedItems?[reqDocIdOrDocType], selection.values.allSatisfy(\.isEmpty) {
 				continue
 			}
 			var docReq: DocRequest?
@@ -301,7 +306,7 @@ public class MdocHelpers {
 			} else {
 				Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType)!.0
 			}
-			if haveSelectedItems, let deviceRequest {
+			if haveSelectedItems, !discloseAll, let deviceRequest {
 				docReq = deviceRequest.docRequests.findDoc(name: documentToRespond.issuerAuth.mso.docType)
 				guard docReq != nil else {
 					docErrors.append([documentToRespond.issuerAuth.mso.docType: UInt64(0)])
@@ -335,13 +340,13 @@ public class MdocHelpers {
 				nil
 			}
 			let reqNamespaces: [String] = if haveSelectedItems {
-				Array(docSelectedItems!.keys)
+				discloseAll ? Array(issuerNs.nameSpaces.keys) : Array(docSelectedItems!.keys)
 			} else {
 				Array(docReq!.itemsRequest.requestNameSpaces.nameSpaces.keys)
 			}
 			for reqNamespace in reqNamespaces {
 				let reqElementIdentifiers: [String] = if haveSelectedItems {
-					docSelectedItems![reqNamespace]!.map(\.elementIdentifier)
+					discloseAll ? issuerNs[reqNamespace]!.map(\.elementIdentifier) : docSelectedItems![reqNamespace]!.map(\.elementIdentifier)
 				} else {
 					docReq!.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]!.elementIdentifiers
 				}
@@ -356,13 +361,15 @@ public class MdocHelpers {
 					unrequestedItems = itemsReqSet.subtracting(requested)
 					itemsReqSet.formIntersection(requested)
 				}
-				let ageOverElementIdentifiers = IsoMdlModel.moreThan2AgeOverElementIdentifiers(
-					documentToRespond.issuerAuth.mso.docType,
-					reqNamespace,
-					SimpleAgeAttest(namespaces: issuerNs.nameSpaces),
-					Array(itemsReqSet)
-				)
-				itemsReqSet.subtract(ageOverElementIdentifiers)
+				if !discloseAll {
+					let ageOverElementIdentifiers = IsoMdlModel.moreThan2AgeOverElementIdentifiers(
+						documentToRespond.issuerAuth.mso.docType,
+						reqNamespace,
+						SimpleAgeAttest(namespaces: issuerNs.nameSpaces),
+						Array(itemsReqSet)
+					)
+					itemsReqSet.subtract(ageOverElementIdentifiers)
+				}
 				let itemsSet = Set(items.map(\.elementIdentifier))
 				let itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
 				if itemsToAdd.count > 0 {

@@ -63,13 +63,14 @@ struct SelectedItemsTests {
 		try fixture.verifySignature(document)
 	}
 
-	@Test func selectionIsBoundedByTheSuppliedRequest() async throws {
+	@Test(arguments: [false, true])
+	func selectionIsBoundedByTheSuppliedRequest(allowFullDisclosure: Bool) async throws {
 		let fixture = try await Fixture()
 		let selected: RequestItems = ["doc-1": [
 			Self.namespace: ["family_name", "portrait"].map(RequestItem.init(elementIdentifier:)),
 			Self.otherNamespace: [.init(elementIdentifier: "address")]
 		]]
-		let result = try await fixture.respond(selected: selected, request: deviceRequest(["family_name"]))
+		let result = try await fixture.respond(selected: selected, request: deviceRequest(["family_name"]), allowFullDisclosure: allowFullDisclosure)
 		let document = try #require(result.response.documents?.first)
 		#expect(document.issuerSigned.issuerNameSpaces?[Self.namespace]?.map(\.elementIdentifier) == ["family_name"])
 		#expect(document.issuerSigned.issuerNameSpaces?[Self.otherNamespace] == nil)
@@ -78,7 +79,7 @@ struct SelectedItemsTests {
 		#expect(result.errors[IsoMdlModel.isoDocType]?[Self.otherNamespace]?.map(\.elementIdentifier) == ["address"])
 		try fixture.verifySignature(document)
 		// Without a DeviceRequest, the explicit selection remains the authority (OpenID4VP).
-		let requestless = try await fixture.respond(selected: selected)
+		let requestless = try await fixture.respond(selected: selected, allowFullDisclosure: allowFullDisclosure)
 		#expect(requestless.response.documents?.first?.issuerSigned.issuerNameSpaces?[Self.namespace]?.count == 2)
 		#expect(requestless.response.documents?.first?.issuerSigned.issuerNameSpaces?[Self.otherNamespace]?.count == 1)
 	}
@@ -99,20 +100,21 @@ struct SelectedItemsTests {
 		#expect(result.errors[IsoMdlModel.isoDocType]?[Self.namespace]?.map(\.elementIdentifier) == ["missing"])
 	}
 
-	@Test(arguments: [false, true])
-	func selectedAgeAttestationsAreMinimised(withRequest: Bool) async throws {
+	@Test(arguments: [false, true], [false, true])
+	func selectedAgeAttestationsAreMinimised(withRequest: Bool, allowFullDisclosure: Bool) async throws {
 		let fixture = try await Fixture()
 		let elements = ["family_name", "age_over_18", "age_over_21", "age_over_65"]
 		let request = withRequest ? try deviceRequest(elements) : nil
-		let result = try await fixture.respond(selected: ["doc-1": [Self.namespace: elements.map(RequestItem.init(elementIdentifier:))]], request: request)
+		let result = try await fixture.respond(selected: ["doc-1": [Self.namespace: elements.map(RequestItem.init(elementIdentifier:))]], request: request, allowFullDisclosure: allowFullDisclosure)
 		let items = try #require(result.response.documents?.first?.issuerSigned.issuerNameSpaces?[Self.namespace])
 		#expect(items.contains { $0.elementIdentifier == "family_name" })
 		#expect(items.filter { $0.elementIdentifier.hasPrefix("age_over_") }.count == 2)
 	}
 
-	@Test func nilSelectionPreservesRequestDrivenPreview() async throws {
+	@Test(arguments: [false, true])
+	func nilSelectionPreservesRequestDrivenPreview(allowFullDisclosure: Bool) async throws {
 		let fixture = try await Fixture()
-		let result = try await fixture.respond(selected: nil, request: deviceRequest(["family_name"]))
+		let result = try await fixture.respond(selected: nil, request: deviceRequest(["family_name"]), allowFullDisclosure: allowFullDisclosure)
 		#expect(result.response.documents?.first?.issuerSigned.issuerNameSpaces?[Self.namespace]?.map(\.elementIdentifier) == ["family_name"])
 	}
 
@@ -122,6 +124,55 @@ struct SelectedItemsTests {
 		#expect(result.response.documents?.count == 1)
 		#expect(result.ids == ["doc-2"])
 		#expect(result.metadata == [Data([2])])
+	}
+
+	@Test(arguments: ["requestless", "narrow-request", "unrelated-request"])
+	func fullDisclosureRequiresExplicitOptIn(mode: String) async throws {
+		let fixture = try await Fixture()
+		let request: DeviceRequest? = switch mode {
+		case "narrow-request": try deviceRequest(["family_name"])
+		case "unrelated-request": try deviceRequest(["family_name"], docType: "other.credential")
+		default: nil
+		}
+		let result = try await fixture.respond(selected: ["doc-1": [:]], request: request, allowFullDisclosure: true)
+		let document = try #require(result.response.documents?.first)
+		let actual = document.issuerSigned.issuerNameSpaces?.nameSpaces.mapValues { $0.map(\.elementIdentifier).sorted() }
+		let expected = fixture.credential.issuerNameSpaces?.nameSpaces.mapValues { $0.map(\.elementIdentifier).sorted() }
+		#expect(actual == expected)
+		#expect(result.ids == ["doc-1"])
+		#expect(result.metadata == [Data([1])])
+		try fixture.verifySignature(document)
+	}
+
+	@Test func fullDisclosureOptionDoesNotExpandEmptyArraysOrOuterMap() async throws {
+		let fixture = try await Fixture()
+		for selected: RequestItems in [[:], ["doc-1": [Self.namespace: []]], ["doc-1": [Self.namespace: [], Self.otherNamespace: []]]] {
+			let readsBefore = await fixture.storage.reads
+			let result = try await fixture.respond(selected: selected, allowFullDisclosure: true)
+			#expect(result.response.documents == nil)
+			#expect(result.ids.isEmpty)
+			#expect(result.metadata.isEmpty)
+			#expect(await fixture.storage.reads == readsBefore)
+		}
+	}
+
+	@Test func fullDisclosureOptionAppliesOnlyToEmptyDocumentEntries() async throws {
+		let fixture = try await Fixture()
+		let result = try await fixture.respond(selected: ["doc-1": [:], "doc-2": [Self.namespace: [.init(elementIdentifier: "family_name")]]],
+			secondDocument: true, allowFullDisclosure: true)
+		let documents = try #require(result.response.documents)
+		#expect(documents.count == 2)
+		for (index, id) in result.ids.enumerated() {
+			let fields = try #require(documents[index].issuerSigned.issuerNameSpaces?.nameSpaces)
+			if id == "doc-1" {
+				#expect(fields.values.reduce(0) { $0 + $1.count } == 7)
+				#expect(result.metadata[index] == Data([1]))
+			} else {
+				#expect(fields.keys.sorted() == [Self.namespace])
+				#expect(fields[Self.namespace]?.map(\.elementIdentifier) == ["family_name"])
+				#expect(result.metadata[index] == Data([2]))
+			}
+		}
 	}
 
 	private func deviceRequest(_ elements: [String], docType: String = IsoMdlModel.isoDocType) throws -> DeviceRequest {
@@ -167,11 +218,11 @@ struct SelectedItemsTests {
 			credential = IssuerSigned(issuerNameSpaces: .init(nameSpaces: [SelectedItemsTests.namespace: items, SelectedItemsTests.otherNamespace: [address]]), issuerAuth: issuerAuth)
 		}
 
-		func respond(selected: RequestItems?, request: DeviceRequest? = nil, secondDocument: Bool = false, deviceNamespaces: RequestDeviceNameSpaces? = nil, zkRepository: ZkSystemRepository? = nil) async throws
+		func respond(selected: RequestItems?, request: DeviceRequest? = nil, secondDocument: Bool = false, deviceNamespaces: RequestDeviceNameSpaces? = nil, zkRepository: ZkSystemRepository? = nil, allowFullDisclosure: Bool = false) async throws
 			-> (response: DeviceResponse, valid: RequestItems, errors: RequestItems, metadata: [Data?], ids: [String]) {
 			let docs = secondDocument ? ["doc-1": credential, "doc-2": credential] : ["doc-1": credential]
 			let result = try #require(try await MdocHelpers.getDeviceResponseToSend(deviceRequest: request, issuerSigned: docs,
-				docMetadata: ["doc-1": Data([1]), "doc-2": Data([2])], selectedItems: selected,
+				docMetadata: ["doc-1": Data([1]), "doc-2": Data([2])], selectedItems: selected, allowFullDisclosureForEmptySelection: allowFullDisclosure,
 				privateKeyObjects: ["doc-1": key, "doc-2": key], sessionTranscript: transcript, dauthMethod: .deviceSignature,
 				unlockData: [:], zkSpecsRequested: zkRepository.map { [IsoMdlModel.isoDocType: $0.getAllZkSystemSpecs()] },
 				zkSystemRepository: zkRepository, deviceNameSpacesRequested: deviceNamespaces, authenticationContext: ThreadSafeAuthContext()))
