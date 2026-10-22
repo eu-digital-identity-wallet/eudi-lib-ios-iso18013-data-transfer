@@ -78,7 +78,8 @@ public class MdocHelpers {
 			if docToSend.documents == nil, status != .error { logger.error("Could not create documents to send") }
 			let cborToSend = docToSend.toCBOR(options: CBOROptions())
 			let clearBytesToSend = cborToSend.encode()
-			let cipherData = try await sessionEncryption.encrypt(clearBytesToSend)
+			// Status-only errors must not consume an IV for ciphertext that is never sent.
+			let cipherData = status == .error ? nil : try await sessionEncryption.encrypt(clearBytesToSend)
 			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 11 : 20)
 			return .success((Data(sd.encode(options: CBOROptions())), Data(clearBytesToSend)))
 		} catch { return .failure(error) }
@@ -138,6 +139,9 @@ public class MdocHelpers {
 			guard var sessionEncryption else {
 				logger.error("Session Encryption not initialized")
 				return .failure(Self.makeError(code: .sessionEncryptionNotInitialized))
+			}
+			guard deviceEngagement.claimSessionEstablishment() else {
+				return .failure(Self.makeError(code: .sessionAlreadyEstablished))
 			}
 			let requestData = try await sessionEncryption.decrypt(requestCipherData)
 			let deviceRequest = try DeviceRequest(data: requestData)
