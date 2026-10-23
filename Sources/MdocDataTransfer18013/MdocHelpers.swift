@@ -262,6 +262,18 @@ public class MdocHelpers {
 		documentIds: [String],
 		zkpDocumentIds: [String]
 	)? {
+		// Both disclosure and reader-authentication results are indexed by docType.
+		// Reject ambiguous keys before previewing or signing any document, including
+		// when selectedItems is supplied. Empty keys are reserved for request-wide auth.
+		if let deviceRequest {
+			var docTypes = Set<DocType>()
+			for request in deviceRequest.docRequests {
+				let docType = request.itemsRequest.docType
+				guard !docType.isEmpty, docTypes.insert(docType).inserted else {
+					throw Self.makeError(code: .requestDecodeError)
+				}
+			}
+		}
 		var docFiltered = [Document](); var docIdsFiltered = [String]();
 		var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
