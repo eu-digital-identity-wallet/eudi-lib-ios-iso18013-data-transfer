@@ -347,7 +347,7 @@ public class MdocHelpers {
 				}
 				var itemsReqSet = Set(reqElementIdentifiers)
 				if haveSelectedItems == false {
-					let simpleAgeAttestation = SimpleAgeAttest(namespaces: issuerNs.nameSpaces)
+					let simpleAgeAttestation = SimpleAgeAttest(namespaces: issuerNs.nameSpaces, namespace: reqNamespace)
 					let ageOverElementIdentifiers = IsoMdlModel.self.moreThan2AgeOverElementIdentifiers(
 						reqDocIdOrDocType,
 						reqNamespace,
