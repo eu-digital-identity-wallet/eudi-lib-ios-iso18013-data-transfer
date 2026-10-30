@@ -1,5 +1,5 @@
 {
-  "originHash" : "99823c2927670b639269fefaba3c60f821c92ea45edd4888c344b398b37d3e24",
+  "originHash" : "96cb3ef2cc79e3a9a5a358a3cc48f62bed6b51770f2fa2e875e4a6d3dbfaf161",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "3114a358adcccc94d94b9acc91d74c4bb06a801e",
-        "version" : "0.28.0"
+        "revision" : "d86c695dae25f01254341addfbbe4580e899910b",
+        "version" : "0.28.1"
       }
     },
     {
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "db28174ebf40d6e1a5e71f2e93e8c017cdc618dc",
-        "version" : "0.28.2"
+        "revision" : "5fcfe72502ad24a4e38c108b78eb531fb55889e4",
+        "version" : "0.28.3"
       }
     },
     {
@@ -123,8 +123,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/niscy-eudiw/SwiftCBOR.git",
       "state" : {
-        "revision" : "871d2949182eba99bcc8166d4582187c6d86f75c",
-        "version" : "0.6.8"
+        "revision" : "89360f74e895effa3b65e5e2f2c1e359160f8b69",
+        "version" : "0.7.0"
       }
     },
     {
