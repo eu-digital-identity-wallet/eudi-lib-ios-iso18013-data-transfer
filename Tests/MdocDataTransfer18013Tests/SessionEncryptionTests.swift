@@ -292,6 +292,46 @@ struct SessionEncryptionTests {
     }
     #endif
 
+    @Test func freshAdvertisingIsAdmittedOnceAndLiveStartsAreIdempotent() async throws {
+        let fixture = try await Fixture()
+        var state = BleAdvertisingState()
+        let first = try state.admit(fixture.engagement)
+        let second = try state.admit(fixture.engagement)
+        #expect(first == .start)
+        #expect(second == .alreadyActive)
+        state.retire()
+        #expect(throws: BleAdvertisingState.Failure.reusedUUID) { try state.admit(fixture.engagement) }
+        var anotherTransport = BleAdvertisingState()
+        #expect(throws: BleAdvertisingState.Failure.reusedUUID) { try anotherTransport.admit(fixture.engagement) }
+    }
+
+    @Test func liveAdvertisingPauseCanResumeWithoutRetiringTheEngagement() async throws {
+        let fixture = try await Fixture()
+        var state = BleAdvertisingState()
+        _ = try state.admit(fixture.engagement)
+        let resumed = try state.admit(fixture.engagement, isAdvertising: false)
+        #expect(resumed == .resume)
+        let duplicate = try state.admit(fixture.engagement, isAdvertising: true)
+        #expect(duplicate == .alreadyActive)
+        #expect(!fixture.engagement.isSessionTerminated)
+    }
+
+    @Test func newKeyOnOldEngagementCannotReuseAdvertisedUUID() async throws {
+        let fixture = try await Fixture()
+        var state = BleAdvertisingState()
+        _ = try state.admit(fixture.engagement)
+        state.retire()
+        var reused = fixture.engagement
+        reused.invalidateSession()
+        try await reused.makePrivateKey(secureArea: SoftwareSecureArea.create(storage: SessionTestKeyStorage()), keyOptions: .init(curve: .P256))
+        #expect(!reused.isSessionTerminated)
+        #expect(reused.ble_uuid == fixture.engagement.ble_uuid)
+        #expect(throws: BleAdvertisingState.Failure.reusedUUID) { try state.admit(reused) }
+        let fresh = try await Fixture()
+        let admitted = try state.admit(fresh.engagement)
+        #expect(admitted == .start)
+    }
+
     #if !os(watchOS)
     @Test func stoppedEngagementCannotBeAdvertisedAgain() async throws {
         let fixture = try await Fixture()

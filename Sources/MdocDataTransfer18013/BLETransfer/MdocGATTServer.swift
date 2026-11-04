@@ -50,6 +50,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	var peerState = GattPeerState()
 	var initSuccess:Bool = false
     var advertisingGeneration = UUID()
+    var advertisingState = BleAdvertisingState()
     var advertisedEngagement: DeviceEngagement?
 
 	required public init() {
@@ -169,9 +170,9 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 
 	/// Returns true if the peripheralManager state is poweredOn
 	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
-
+	
 	public var supportsL2cap: Bool { false }
-
+	
 	func buildServices(uuid: String) {
 		let bleUserService = CBMutableService(type: CBUUID(string: uuid), primary: true)
 		let stateProperties: CBCharacteristicProperties = [.notify, .writeWithoutResponse]
@@ -215,6 +216,18 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
         monitorInactivity()
         guard inactivityTimer?.check() != false else { return }
         if peripheralManager.state == .poweredOn {
+            do {
+                switch try advertisingState.admit(engagement, isAdvertising: advertising) {
+                case .alreadyActive: return
+                case .resume:
+                    advertiseService(uuid: serviceUuid)
+                    return
+                case .start: break
+                }
+            } catch {
+                self.error = MdocHelpers.makeError(code: .bleEngagementReused)
+                return
+            }
             advertisedEngagement = engagement
             logger.info("Peripheral manager powered on")
             error = nil
@@ -286,6 +299,8 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
             return DispatchQueue.main.sync { self.terminateSession(clearDelegate: clearDelegate, preserveServices: preserveServices) }
         }
         let engagement = advertisedEngagement
+        advertisedEngagement = nil
+        advertisingState.retire()
         let timer = inactivityTimer
         inactivityTimer = nil
         timer?.end()
