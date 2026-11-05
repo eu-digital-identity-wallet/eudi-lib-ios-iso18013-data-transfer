@@ -235,7 +235,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - deviceRequest: Device request coming from verifier
 	///   - issuerSigned: Map of document ID to issuerSigned cbor data
-	///   - selectedItems: Selected items from user (Map of Document ID to namespaced items)
+	///   - selectedItems: Selected items from user (Map of Document ID to namespaced items). Empty selections disclose nothing; nil resolves the verifier request.
 	///   - sessionEncryption: Session Encryption data structure
 	///   - eReaderKey: eReader (verifier) ephemeral public key
 	///   - devicePrivateKeys: Device Private keys
@@ -328,21 +328,13 @@ public class MdocHelpers {
 				nil
 			}
 			let reqNamespaces: [String] = if haveSelectedItems {
-				if !docSelectedItems!.isEmpty {
-					Array(docSelectedItems!.keys)
-				} else {
-					Array(issuerNs.nameSpaces.keys)
-				}
+				Array(docSelectedItems!.keys)
 			} else {
 				Array(docReq!.itemsRequest.requestNameSpaces.nameSpaces.keys)
 			}
 			for reqNamespace in reqNamespaces {
 				let reqElementIdentifiers: [String] = if haveSelectedItems {
-					if !docSelectedItems!.isEmpty {
-						Array(docSelectedItems![reqNamespace]!).map(\.elementIdentifier)
-					} else {
-						Array(issuerNs.nameSpaces[reqNamespace]!.map(\.elementIdentifier))
-					}
+					docSelectedItems![reqNamespace]!.map(\.elementIdentifier)
 				} else {
 					docReq!.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]!.elementIdentifiers
 				}
