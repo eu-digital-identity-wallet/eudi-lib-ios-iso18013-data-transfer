@@ -32,8 +32,9 @@ private func sampleDocument() throws -> IssuerSigned {
 	let transcript = SessionTranscript(handOver: .null)
 	for selection: RequestItems in [["doc": [:]], ["doc": ["org.iso.18013.5.1": []]]] {
 		let response = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: ["doc": document], docMetadata: [:], selectedItems: selection, privateKeyObjects: ["doc": key], sessionTranscript: transcript, dauthMethod: .deviceSignature, unlockData: [:], authenticationContext: ThreadSafeAuthContext())
-		#expect(response?.deviceResponse.documents == nil)
-		#expect(response?.documentIds.isEmpty == true)
+		#expect(response?.documentIds == ["doc"])
+		#expect(response?.deviceResponse.documents?.first?.issuerSigned.issuerNameSpaces == nil)
+		#expect(response?.deviceResponse.documents?.first?.deviceSigned != nil)
 	}
 	let control = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: ["doc": document], docMetadata: [:], selectedItems: ["doc": ["org.iso.18013.5.1": [RequestItem(elementIdentifier: "family_name")]]], privateKeyObjects: ["doc": key], sessionTranscript: transcript, dauthMethod: .deviceSignature, unlockData: [:], authenticationContext: ThreadSafeAuthContext())
 	#expect(control?.documentIds == ["doc"])

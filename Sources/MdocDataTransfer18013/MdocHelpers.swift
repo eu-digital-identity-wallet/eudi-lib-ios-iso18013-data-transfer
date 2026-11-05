@@ -235,7 +235,7 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - deviceRequest: Device request coming from verifier
 	///   - issuerSigned: Map of document ID to issuerSigned cbor data
-	///   - selectedItems: Selected items from user (Map of Document ID to namespaced items). Empty selections disclose nothing; nil resolves the verifier request.
+	///   - selectedItems: Selected items from user (Map of Document ID to namespaced items). An empty selection presents the document without data elements; nil resolves the verifier request.
 	///   - sessionEncryption: Session Encryption data structure
 	///   - eReaderKey: eReader (verifier) ephemeral public key
 	///   - devicePrivateKeys: Device Private keys
@@ -380,11 +380,12 @@ public class MdocHelpers {
 				}
 			} // end ns for
 			let errors: Errors? = nsErrorsToAdd.isEmpty ? nil : Errors(errors: nsErrorsToAdd)
-			if nsItemsToAdd.count > 0 {
+			// A selection without elements presents the document with no data elements (OpenID4VP 1.0 section 6.4.1).
+			let presentsDocumentOnly = haveSelectedItems && docSelectedItems!.values.allSatisfy(\.isEmpty)
+			if nsItemsToAdd.count > 0 || presentsDocumentOnly {
 				let issuerAuthToAdd = documentToRespond.issuerAuth
-				let issuerNameSpacesToAdd = IssuerNameSpaces(nameSpaces: nsItemsToAdd)
 				let issuerSignedToAdd = IssuerSigned(
-					issuerNameSpaces: issuerNameSpacesToAdd,
+					issuerNameSpaces: nsItemsToAdd.isEmpty ? nil : IssuerNameSpaces(nameSpaces: nsItemsToAdd),
 					issuerAuth: issuerAuthToAdd
 				)
 				var devSignedToAdd: DeviceSigned? = nil
