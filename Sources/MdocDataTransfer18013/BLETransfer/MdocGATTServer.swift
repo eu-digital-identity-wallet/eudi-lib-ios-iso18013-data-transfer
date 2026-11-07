@@ -28,7 +28,7 @@ import MdocSecurity18013
 public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	var peripheralManager: CBPeripheralManager!
 	var bleDelegate: Delegate!
-	var remoteCentral: CBCentral!
+	var remoteCentral: CBCentral?
 	var stateCharacteristic: CBMutableCharacteristic!
 	var server2ClientCharacteristic: CBMutableCharacteristic!
 	public weak var delegate: (any MdocOfflineDelegate)?
@@ -281,6 +281,10 @@ public func stop() {
 	}
 
 	public func sendData(_ data: Data) {
+		guard let remoteCentral else {
+			error = MdocHelpers.makeError(code: .unexpected_error, str: "No remote central available for response")
+			return
+		}
 			let maxPayloadBlockSize = min(511, remoteCentral.maximumUpdateValueLength - 1)
 			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: maxPayloadBlockSize)
 			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
@@ -292,6 +296,10 @@ public func stop() {
 		guard !sendBuffer.isEmpty else {
 			status = .responseSent
 			logger.info("Finished sending BLE data")
+			return
+		}
+		guard let remoteCentral else {
+			error = MdocHelpers.makeError(code: .unexpected_error, str: "No remote central available for response")
 			return
 		}
 		let firstPendingBlock = sendBuffer.first!
