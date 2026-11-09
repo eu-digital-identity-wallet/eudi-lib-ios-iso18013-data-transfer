@@ -16,7 +16,9 @@ limitations under the License.
 
 import Foundation
 import Testing
+import Foundation
 import MdocDataModel18013
+import MdocSecurity18013
 import SwiftCBOR
 @testable import MdocDataTransfer18013
 
