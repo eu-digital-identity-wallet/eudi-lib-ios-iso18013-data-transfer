@@ -366,15 +366,13 @@ public class MdocHelpers {
 					unrequestedItems = itemsReqSet.subtracting(requested)
 					itemsReqSet.formIntersection(requested)
 				}
-				if !discloseAll {
-					let ageOverElementIdentifiers = IsoMdlModel.moreThan2AgeOverElementIdentifiers(
+				let ageOverElementIdentifiers = IsoMdlModel.moreThan2AgeOverElementIdentifiers(
 						documentToRespond.issuerAuth.mso.docType,
 						reqNamespace,
-						SimpleAgeAttest(namespaces: issuerNs.nameSpaces),
+						SimpleAgeAttest(namespaces: issuerNs.nameSpaces, namespace: reqNamespace),
 						Array(itemsReqSet)
 					)
 					itemsReqSet.subtract(ageOverElementIdentifiers)
-				}
 				let itemsSet = Set(items.map(\.elementIdentifier))
 				let itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
 				if itemsToAdd.count > 0 {

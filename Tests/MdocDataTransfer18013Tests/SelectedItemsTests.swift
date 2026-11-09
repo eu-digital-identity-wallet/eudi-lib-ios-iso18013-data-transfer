@@ -137,7 +137,11 @@ struct SelectedItemsTests {
 		let result = try await fixture.respond(selected: ["doc-1": [:]], request: request, allowFullDisclosure: true)
 		let document = try #require(result.response.documents?.first)
 		let actual = document.issuerSigned.issuerNameSpaces?.nameSpaces.mapValues { $0.map(\.elementIdentifier).sorted() }
-		let expected = fixture.credential.issuerNameSpaces?.nameSpaces.mapValues { $0.map(\.elementIdentifier).sorted() }
+		// Full disclosure still applies the maximum-two age-attestation rule.
+		let expected = [
+			Self.namespace: ["age_over_18", "age_over_21", "document_number", "family_name", "portrait"],
+			Self.otherNamespace: ["address"]
+		]
 		#expect(actual == expected)
 		#expect(result.ids == ["doc-1"])
 		#expect(result.metadata == [Data([1])])
@@ -165,7 +169,9 @@ struct SelectedItemsTests {
 		for (index, id) in result.ids.enumerated() {
 			let fields = try #require(documents[index].issuerSigned.issuerNameSpaces?.nameSpaces)
 			if id == "doc-1" {
-				#expect(fields.values.reduce(0) { $0 + $1.count } == 7)
+				#expect(fields.keys.sorted() == [Self.namespace, Self.otherNamespace].sorted())
+				#expect(fields[Self.namespace]?.map(\.elementIdentifier).sorted() == ["age_over_18", "age_over_21", "document_number", "family_name", "portrait"])
+				#expect(fields[Self.otherNamespace]?.map(\.elementIdentifier) == ["address"])
 				#expect(result.metadata[index] == Data([1]))
 			} else {
 				#expect(fields.keys.sorted() == [Self.namespace])
@@ -213,8 +219,10 @@ struct SelectedItemsTests {
 			let mso = MobileSecurityObject(version: "1.0", digestAlgorithm: "SHA-256", valueDigests: .init(valueDigests: [:]), deviceKey: publicKey,
 				docType: IsoMdlModel.isoDocType, validityInfo: .init(signed: "2026-01-01T00:00:00Z", validFrom: "2026-01-01T00:00:00Z", validUntil: "2030-01-01T00:00:00Z"))
 			// Issuer trust is outside this helper's boundary; use a synthetic stored credential.
+			// The wire decoder requires a nonempty chain of nonempty byte strings,
+			// but does not parse certificates or validate issuer trust.
 			let issuerAuth = IssuerAuth(mso: mso, msoRawData: mso.toCBOR(options: CBOROptions()).taggedEncoded.encode(), verifyAlgorithm: .es256,
-				signature: Data(repeating: 0, count: 64), x5chain: [], statusList: nil)
+				signature: Data(repeating: 0, count: 64), x5chain: [[0]], statusList: nil)
 			credential = IssuerSigned(issuerNameSpaces: .init(nameSpaces: [SelectedItemsTests.namespace: items, SelectedItemsTests.otherNamespace: [address]]), issuerAuth: issuerAuth)
 		}
 
