@@ -71,15 +71,20 @@ public class MdocHelpers {
 		docToSend: DeviceResponse
 	) async -> Result<(Data, Data), Error> {
 		do {
+			let cborToSend = docToSend.toCBOR(options: CBOROptions())
+			let clearBytesToSend = cborToSend.encode()
+			// Status-only messages must not consume a nonce for an unsent payload.
+			if status == .error {
+				let sd = SessionData(cipher_data: nil, status: 11)
+				return .success((Data(sd.encode(options: CBOROptions())), Data(clearBytesToSend)))
+			}
 			guard var sessionEncryption else {
 				logger.error("Session Encryption not initialized")
 				return .failure(Self.makeError(code: .sessionEncryptionNotInitialized))
 			}
-			if docToSend.documents == nil, status != .error { logger.error("Could not create documents to send") }
-			let cborToSend = docToSend.toCBOR(options: CBOROptions())
-			let clearBytesToSend = cborToSend.encode()
+			if docToSend.documents == nil { logger.error("Could not create documents to send") }
 			let cipherData = try await sessionEncryption.encrypt(clearBytesToSend)
-			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 11 : 20)
+			let sd = SessionData(cipher_data: cipherData, status: 20)
 			return .success((Data(sd.encode(options: CBOROptions())), Data(clearBytesToSend)))
 		} catch { return .failure(error) }
 	}
