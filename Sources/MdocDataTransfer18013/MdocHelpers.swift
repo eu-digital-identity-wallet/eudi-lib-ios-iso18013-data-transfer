@@ -71,13 +71,18 @@ public class MdocHelpers {
 		docToSend: DeviceResponse
 	) async -> Result<(Data, Data), Error> {
 		do {
+			let cborToSend = docToSend.toCBOR(options: CBOROptions())
+			let clearBytesToSend = cborToSend.encode()
+			// Status-only messages must not consume a nonce for an unsent payload.
+			if status == .error {
+				let sd = SessionData(cipher_data: nil, status: 11)
+				return .success((Data(sd.encode(options: CBOROptions())), Data(clearBytesToSend)))
+			}
 			guard var sessionEncryption else {
 				logger.error("Session Encryption not initialized")
 				return .failure(Self.makeError(code: .sessionEncryptionNotInitialized))
 			}
 			if docToSend.documents == nil, status != .error { logger.error("Could not create documents to send") }
-			let cborToSend = docToSend.toCBOR(options: CBOROptions())
-			let clearBytesToSend = cborToSend.encode()
 			// Status-only errors must not consume an IV for ciphertext that is never sent.
 			let cipherData = status == .error ? nil : try await sessionEncryption.encrypt(clearBytesToSend)
 			let sd = SessionData(cipher_data: status == .error ? nil : cipherData, status: status == .error ? 11 : 20)
@@ -234,7 +239,12 @@ public class MdocHelpers {
 	/// - Parameters:
 	///   - deviceRequest: Device request coming from verifier
 	///   - issuerSigned: Map of document ID to issuerSigned cbor data
-	///   - selectedItems: Selected items from user (Map of Document ID to namespaced items)
+	///   - selectedItems: Selected items from user (Map of Document ID to namespaced items).
+	///     Nil uses the device request. By default, empty maps or arrays select no elements.
+	///     Explicitly selected elements are limited to the device request when one is supplied.
+	///   - allowFullDisclosureForEmptySelection: Defaults to false. True restores legacy full-credential disclosure
+	///     for an empty per-document map, ignoring device-request bounds and age-over minimisation for that document.
+	///     An empty outer map or empty namespace arrays still select nothing.
 	///   - sessionEncryption: Session Encryption data structure
 	///   - eReaderKey: eReader (verifier) ephemeral public key
 	///   - devicePrivateKeys: Device Private keys
@@ -247,6 +257,7 @@ public class MdocHelpers {
 		issuerSigned: [String: IssuerSigned],
 		docMetadata: [String: Data],
 		selectedItems: RequestItems? = nil,
+		allowFullDisclosureForEmptySelection: Bool = false,
 		sessionEncryption: SessionEncryption? = nil,
 		eReaderKey: CoseKey? = nil,
 		privateKeyObjects: [String: CoseKeyPrivate],
@@ -266,6 +277,18 @@ public class MdocHelpers {
 		documentIds: [String],
 		zkpDocumentIds: [String]
 	)? {
+		// Both disclosure and reader-authentication results are indexed by docType.
+		// Reject ambiguous keys before previewing or signing any document, including
+		// when selectedItems is supplied. Empty keys are reserved for request-wide auth.
+		if let deviceRequest {
+			var docTypes = Set<DocType>()
+			for request in deviceRequest.docRequests {
+				let docType = request.itemsRequest.docType
+				guard !docType.isEmpty, docTypes.insert(docType).inserted else {
+					throw Self.makeError(code: .requestDecodeError)
+				}
+			}
+		}
 		var docFiltered = [Document](); var docIdsFiltered = [String]();
 		var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
@@ -281,7 +304,11 @@ public class MdocHelpers {
 		}
 		var docId: String?
 		for reqDocIdOrDocType in reqDocIdsOrDocTypes {
-			var docReq: DocRequest? // if selected items is null
+			let discloseAll = allowFullDisclosureForEmptySelection && selectedItems?[reqDocIdOrDocType]?.isEmpty == true
+			if !discloseAll, let selection = selectedItems?[reqDocIdOrDocType], selection.values.allSatisfy(\.isEmpty) {
+				continue
+			}
+			var docReq: DocRequest?
 			if haveSelectedItems == false {
 				docReq = deviceRequest?.docRequests.findDoc(name: reqDocIdOrDocType)
 				guard let issuerSignedPair = issuerSigned.first(
@@ -300,6 +327,14 @@ public class MdocHelpers {
 			} else {
 				Array(issuerSigned.values).findDoc(name: reqDocIdOrDocType)!.0
 			}
+			if haveSelectedItems, !discloseAll, let deviceRequest {
+				docReq = deviceRequest.docRequests.findDoc(name: documentToRespond.issuerAuth.mso.docType)
+				guard docReq != nil else {
+					docErrors.append([documentToRespond.issuerAuth.mso.docType: UInt64(0)])
+					errorReqItemsDocDict[documentToRespond.issuerAuth.mso.docType] = selectedItems![reqDocIdOrDocType]
+					continue
+				}
+			}
 			let privateKeyObject = if haveSelectedItems {
 				privateKeyObjects[reqDocIdOrDocType]
 			} else {
@@ -310,7 +345,6 @@ public class MdocHelpers {
 			} else {
 				docMetadata[docId!]
 			}
-			resMetadata.append(documentMetadata)
 			// Document's data must be in CBOR bytes that has the IssuerSigned structure according to ISO 23220-4
 			// Currently, the library does not support IssuerSigned structure without the nameSpaces field.
 			guard let issuerNs = documentToRespond.issuerNameSpaces else {
@@ -327,21 +361,13 @@ public class MdocHelpers {
 				nil
 			}
 			let reqNamespaces: [String] = if haveSelectedItems {
-				if !docSelectedItems!.isEmpty {
-					Array(docSelectedItems!.keys)
-				} else {
-					Array(issuerNs.nameSpaces.keys)
-				}
+				discloseAll ? Array(issuerNs.nameSpaces.keys) : Array(docSelectedItems!.keys)
 			} else {
 				Array(docReq!.itemsRequest.requestNameSpaces.nameSpaces.keys)
 			}
 			for reqNamespace in reqNamespaces {
 				let reqElementIdentifiers: [String] = if haveSelectedItems {
-					if !docSelectedItems!.isEmpty {
-						Array(docSelectedItems![reqNamespace]!).map(\.elementIdentifier)
-					} else {
-						Array(issuerNs.nameSpaces[reqNamespace]!.map(\.elementIdentifier))
-					}
+					discloseAll ? issuerNs[reqNamespace]!.map(\.elementIdentifier) : docSelectedItems![reqNamespace]!.map(\.elementIdentifier)
 				} else {
 					docReq!.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]!.elementIdentifiers
 				}
@@ -350,21 +376,21 @@ public class MdocHelpers {
 					continue
 				}
 				var itemsReqSet = Set(reqElementIdentifiers)
-				if haveSelectedItems == false {
-					let simpleAgeAttestation = SimpleAgeAttest(namespaces: issuerNs.nameSpaces)
-					let ageOverElementIdentifiers = IsoMdlModel.self.moreThan2AgeOverElementIdentifiers(
-						reqDocIdOrDocType,
+				var unrequestedItems = Set<String>()
+				if haveSelectedItems, let docReq {
+					let requested = Set(docReq.itemsRequest.requestNameSpaces.nameSpaces[reqNamespace]?.elementIdentifiers ?? [])
+					unrequestedItems = itemsReqSet.subtracting(requested)
+					itemsReqSet.formIntersection(requested)
+				}
+				let ageOverElementIdentifiers = IsoMdlModel.moreThan2AgeOverElementIdentifiers(
+						documentToRespond.issuerAuth.mso.docType,
 						reqNamespace,
-						simpleAgeAttestation,
-						reqElementIdentifiers
+						SimpleAgeAttest(namespaces: issuerNs.nameSpaces, namespace: reqNamespace),
+						Array(itemsReqSet)
 					)
-					itemsReqSet = itemsReqSet.subtracting(ageOverElementIdentifiers)
-				}
+					itemsReqSet.subtract(ageOverElementIdentifiers)
 				let itemsSet = Set(items.map(\.elementIdentifier))
-				var itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
-				if haveSelectedItems {
-					itemsToAdd = itemsToAdd.filter({ reqElementIdentifiers.contains($0.elementIdentifier) })
-				}
+				let itemsToAdd = items.filter({ itemsReqSet.contains($0.elementIdentifier) })
 				if itemsToAdd.count > 0 {
 					nsItemsToAdd[reqNamespace] = itemsToAdd
 					let retainedElementsById = docReq?
@@ -381,7 +407,7 @@ public class MdocHelpers {
 						)
 					}
 				}
-				let errorItemsSet = itemsReqSet.subtracting(itemsSet)
+				let errorItemsSet = itemsReqSet.subtracting(itemsSet).union(unrequestedItems)
 				if errorItemsSet.count > 0 {
 					nsErrorsToAdd[reqNamespace] = Dictionary(grouping: errorItemsSet, by: { $0 }).mapValues { _ in 0 }
 				}
@@ -446,6 +472,7 @@ public class MdocHelpers {
 				)
 				docFiltered.append(docToAdd)
 				docIdsFiltered.append(reqDocIdOrDocType)
+				resMetadata.append(documentMetadata)
 				validReqItemsDocDict[documentToRespond.issuerAuth.mso.docType] = validReqItemsNsDict
 			} else {
 				docErrors.append([documentToRespond.issuerAuth.mso.docType: UInt64(0)])
