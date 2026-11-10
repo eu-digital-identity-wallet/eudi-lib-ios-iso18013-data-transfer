@@ -225,7 +225,7 @@ public class MdocHelpers {
 				}
 				userRequestInfo.readerAuthResults[docR.itemsRequest.docType] = readerValidation
 			}
-				try sessionEncryption.ensureActive()
+				//try sessionEncryption.checkActive()
 				return .success((
 					sessionEncryption: sessionEncryption,
 					deviceRequest: deviceRequest,
