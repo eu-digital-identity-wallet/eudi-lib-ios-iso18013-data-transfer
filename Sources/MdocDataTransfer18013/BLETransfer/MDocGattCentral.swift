@@ -61,6 +61,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 
     public func startBleAdvertising() {
         guard Thread.isMainThread else { DispatchQueue.main.sync { self.startBleAdvertising() }; return }
+        guard peripheral == nil, centralManager?.isScanning != true else { return }
         if centralManager?.state == .poweredOn { handleCentralPoweredOn() }
     }
 
