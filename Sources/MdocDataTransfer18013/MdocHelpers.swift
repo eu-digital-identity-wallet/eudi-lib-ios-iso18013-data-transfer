@@ -303,9 +303,6 @@ public class MdocHelpers {
 		var docId: String?
 		for reqDocIdOrDocType in reqDocIdsOrDocTypes {
 			let discloseAll = allowFullDisclosureForEmptySelection && selectedItems?[reqDocIdOrDocType]?.isEmpty == true
-			if !discloseAll, let selection = selectedItems?[reqDocIdOrDocType], selection.values.allSatisfy(\.isEmpty) {
-				continue
-			}
 			var docReq: DocRequest?
 			if haveSelectedItems == false {
 				docReq = deviceRequest?.docRequests.findDoc(name: reqDocIdOrDocType)

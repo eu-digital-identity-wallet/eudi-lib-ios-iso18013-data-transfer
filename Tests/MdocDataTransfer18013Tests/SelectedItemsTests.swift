@@ -26,19 +26,19 @@ struct SelectedItemsTests {
 	private static let otherNamespace = "example.extra"
 
 	@Test(arguments: [false, true])
-	func emptySelectionsDiscloseNothing(withRequest: Bool) async throws {
+	func emptySelectionsPresentSignedDocumentsWithoutClaims(withRequest: Bool) async throws {
 		let fixture = try await Fixture()
 		let request = withRequest ? try deviceRequest(["family_name"]) : nil
 		for selection: [String: [RequestItem]] in [[:], [Self.namespace: []], [Self.namespace: [], Self.otherNamespace: []]] {
-			let readsBefore = await fixture.storage.reads
 			let result = try await fixture.respond(selected: ["doc-1": selection], request: request,
-				deviceNamespaces: ["doc-1": DeviceNameSpaces(deviceNameSpaces: [:])], zkRepository: .init(systems: [RejectingZkSystem()]))
-			#expect(result.response.documents?.isEmpty ?? true)
+				deviceNamespaces: ["doc-1": DeviceNameSpaces(deviceNameSpaces: [:])])
+			let document = try #require(result.response.documents?.first)
+			#expect(document.issuerSigned.issuerNameSpaces == nil)
 			#expect(result.response.zkDocuments?.isEmpty ?? true)
-			#expect(result.valid.isEmpty)
-			#expect(result.ids.isEmpty)
-			#expect(result.metadata.isEmpty)
-			#expect(await fixture.storage.reads == readsBefore)
+			#expect(result.valid.values.allSatisfy { $0.isEmpty })
+			#expect(result.ids == ["doc-1"])
+			#expect(result.metadata == [Data([1])])
+			try fixture.verifySignature(document)
 		}
 	}
 
@@ -120,7 +120,7 @@ struct SelectedItemsTests {
 
 	@Test func omittedDocumentsDoNotShiftResponseMetadata() async throws {
 		let fixture = try await Fixture()
-		let result = try await fixture.respond(selected: ["doc-1": [:], "doc-2": [Self.namespace: [.init(elementIdentifier: "family_name")]]], secondDocument: true)
+		let result = try await fixture.respond(selected: ["doc-1": [Self.namespace: [.init(elementIdentifier: "missing")]], "doc-2": [Self.namespace: [.init(elementIdentifier: "family_name")]]], secondDocument: true)
 		#expect(result.response.documents?.count == 1)
 		#expect(result.ids == ["doc-2"])
 		#expect(result.metadata == [Data([2])])
@@ -150,13 +150,19 @@ struct SelectedItemsTests {
 
 	@Test func fullDisclosureOptionDoesNotExpandEmptyArraysOrOuterMap() async throws {
 		let fixture = try await Fixture()
-		for selected: RequestItems in [[:], ["doc-1": [Self.namespace: []]], ["doc-1": [Self.namespace: [], Self.otherNamespace: []]]] {
-			let readsBefore = await fixture.storage.reads
-			let result = try await fixture.respond(selected: selected, allowFullDisclosure: true)
-			#expect(result.response.documents == nil)
-			#expect(result.ids.isEmpty)
-			#expect(result.metadata.isEmpty)
-			#expect(await fixture.storage.reads == readsBefore)
+		let readsBefore = await fixture.storage.reads
+		let empty = try await fixture.respond(selected: [:], allowFullDisclosure: true)
+		#expect(empty.response.documents == nil)
+		#expect(empty.ids.isEmpty)
+		#expect(empty.metadata.isEmpty)
+		#expect(await fixture.storage.reads == readsBefore)
+		for selection: [String: [RequestItem]] in [[Self.namespace: []], [Self.namespace: [], Self.otherNamespace: []]] {
+			let result = try await fixture.respond(selected: ["doc-1": selection], allowFullDisclosure: true)
+			let document = try #require(result.response.documents?.first)
+			#expect(document.issuerSigned.issuerNameSpaces == nil)
+			#expect(result.ids == ["doc-1"])
+			#expect(result.metadata == [Data([1])])
+			try fixture.verifySignature(document)
 		}
 	}
 
@@ -247,19 +253,6 @@ struct SelectedItemsTests {
 				.utf8String(IsoMdlModel.isoDocType), CBOR.map([:]).taggedEncoded])
 			#expect(try signature.validateDetachedCoseSign1(payloadData: Data(payload.taggedEncoded.encode()), publicKey_x963: publicKey.x963Representation))
 		}
-	}
-}
-
-private struct RejectingZkSystem: ZkSystemProtocol {
-	let name = "selection-test"
-	var systemSpecs: [ZkSystemSpec] { [.init(zkSystemId: name, system: name, params: [:])] }
-	func getMatchingSystemSpec(zkSystemSpecs: [ZkSystemSpec], numAttributesRequested: Int64) -> ZkSystemSpec? { zkSystemSpecs.first }
-	func generateProof(zkSystemSpec: ZkSystemSpec, docBytes: [UInt8], x: String?, y: String?, sessionTranscriptBytes: [UInt8], timestamp: Date) throws -> ZkDocument {
-		Issue.record("Empty selection reached proof generation")
-		throw NSError(domain: "SelectedItemsTests", code: 1)
-	}
-	func verifyProof(zkDocument: ZkDocument, zkSystemSpec: ZkSystemSpec, sessionTranscriptBytes: [UInt8]) throws {
-		throw NSError(domain: "SelectedItemsTests", code: 1)
 	}
 }
 
