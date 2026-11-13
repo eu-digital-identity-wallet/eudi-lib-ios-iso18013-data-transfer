@@ -69,6 +69,7 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 	case bleInvalidStateLength
 	case bleInvalidStateByte
 	case bleNoData
+	case sessionAlreadyEstablished
 	
 	public var description: String {
 		switch self {
@@ -87,6 +88,7 @@ public enum ErrorCode: Int, CustomStringConvertible, Sendable {
 		case .bleInvalidStateLength: return "INVALID_STATE_LENGTH"
 		case .bleInvalidStateByte: return "INVALID_STATE_BYTE"
 		case .bleNoData: return "NO_DATA"
+		case .sessionAlreadyEstablished: return "SESSION_ALREADY_ESTABLISHED"
 		default: return "GENERIC_ERROR"
 		}
 	}
