@@ -193,6 +193,12 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		tryStartRequestIfReady()
 	}
 
+	/// The reader sends one byte on the State characteristic. 0x02 ends the session.
+	static func checkEndRequest(state data: Data) throws {
+		guard data.count == 1 else { throw MdocHelpers.makeError(code: .bleInvalidStateLength) }
+		guard data.first == BleTransferMode.END_REQUEST.first else { throw MdocHelpers.makeError(code: .bleInvalidStateByte) }
+	}
+
 	func processData(
 		peripheral: CBPeripheral,
 		characteristic: CBCharacteristic
@@ -204,15 +210,12 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 			logger.info("Processing \(data.count) bytes for \(characteristicDescription)")
 			switch characteristic.uuid {
 			case MdocServiceCharacteristic.state.uuid:
-				if data.count != 1 {
-					error = MdocHelpers.makeError(code: .bleInvalidStateLength)
-				}
-				switch data[0] {
-				case BleTransferMode.END_REQUEST.first!: // 0x02:
+				do {
+					try Self.checkEndRequest(state: data)
 					status = .disconnected
-				case let byte:
-					logger.error("Unknown state \(byte)")
-					error = MdocHelpers.makeError(code: .bleInvalidStateByte)
+				} catch let stateError {
+					logger.error("Invalid state \([UInt8](data))")
+					error = stateError
 				}
 			case MdocServiceCharacteristic.server2Client.uuid:
 				let firstByte = data.popFirst()
