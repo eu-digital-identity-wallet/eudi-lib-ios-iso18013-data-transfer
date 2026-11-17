@@ -193,7 +193,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		tryStartRequestIfReady()
 	}
 
-	/// The reader writes one byte to the State characteristic. 0x02 ends the session.
+	/// The reader sends one byte on the State characteristic. 0x02 ends the session.
 	static func checkEndRequest(state data: Data) throws {
 		guard data.count == 1 else { throw MdocHelpers.makeError(code: .bleInvalidStateLength) }
 		guard data.first == BleTransferMode.END_REQUEST.first else { throw MdocHelpers.makeError(code: .bleInvalidStateByte) }
