@@ -108,7 +108,12 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
                     case .ended: server.endSession()
                     case .fragment: break
                     case let .request(data):
+                        let generation = server.session.generation
                         server.status = .requestReceived
+                        guard server.session.generation == generation else {
+                            peripheral.respond(to: first, withResult: .writeNotPermitted)
+                            return
+                        }
                         server.delegate?.didReceiveRequest(data)
                     }
                 } catch {
