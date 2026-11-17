@@ -750,7 +750,7 @@ public class MdocHelpers {
 			guard let docKeyInfo = DocKeyInfo(from: $0.value),
 				let keyIndex = documentKeyIndexes[$0.key]
 			else { return nil }
-			let secureArea = SecureAreaRegistry.shared.get(name: docKeyInfo.secureAreaName)
+			let secureArea = try SecureAreaRegistry.shared.get(name: docKeyInfo.secureAreaName)
 			let (_, curve) = try await secureArea.getInfoAndCurve(id: $0.key)
 			let coseKeyPrivate = CoseKeyPrivate(
 				privateKeyId: $0.key,

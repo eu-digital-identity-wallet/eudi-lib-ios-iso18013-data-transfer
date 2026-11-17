@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3.3
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -13,7 +13,7 @@ let package = Package(
             targets: ["MdocDataTransfer18013"]),
     ],
     dependencies: [
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security", exact: "0.29.1"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security", exact: "0.31.3"),
 		.package(url: "https://github.com/apple/swift-docc-plugin", from: "1.5.0"),
     ],
     targets: [
