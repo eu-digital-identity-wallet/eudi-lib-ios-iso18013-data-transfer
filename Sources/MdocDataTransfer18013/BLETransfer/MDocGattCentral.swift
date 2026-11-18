@@ -227,6 +227,8 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 				guard prefix == 0 || prefix == 1 else { throw MdocHelpers.makeError(code: .bleNotSupported) }
 				if let message = try receiveBuffer.append(data.dropFirst(), isFinal: prefix == 0) {
 					status = .requestReceived
+					// The synchronous status callback may stop or invalidate this connection.
+					guard self.peripheral === peripheral else { return }
 					delegate?.didReceiveRequest(message)
 				}
 			case MdocServiceCharacteristic.readerIdent.uuid:
