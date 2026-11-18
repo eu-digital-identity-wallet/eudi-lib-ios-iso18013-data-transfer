@@ -27,11 +27,13 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	var hasReaderIdentity = false
 	var didSendStartRequest = false
 	var maximumCharacteristicSize: Int?
-	var readBuffer = Data()
+	private var receiveBuffer = BleMessageBuffer()
+	var readBuffer: Data { receiveBuffer.data }
 	var sendBuffer = [Data]()
 	public var error: Error? = nil {
 		didSet {
 			if let error {
+				disconnect()
 				status = .error
 				delegate?.didFinishedWithError(error)
 			}
@@ -102,6 +104,8 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	private func disconnect() {
+		receiveBuffer.reset()
+		sendBuffer.removeAll()
 		if let peripheral {
 			centralManager.cancelPeripheralConnection(peripheral)
 			self.peripheral = nil
@@ -203,7 +207,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		peripheral: CBPeripheral,
 		characteristic: CBCharacteristic
 	) throws {
-		if var data = characteristic.value {
+		if let data = characteristic.value {
 			let characteristicDescription =
 				MdocServiceCharacteristic(uuid: characteristic.uuid)?.description
 				?? characteristic.uuid.uuidString
@@ -212,24 +216,18 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 			case MdocServiceCharacteristic.state.uuid:
 				do {
 					try Self.checkEndRequest(state: data)
+					disconnect()
 					status = .disconnected
 				} catch let stateError {
 					logger.error("Invalid state \([UInt8](data))")
 					error = stateError
 				}
 			case MdocServiceCharacteristic.server2Client.uuid:
-				let firstByte = data.popFirst()
-				readBuffer.append(data)
-				switch firstByte {
-				case .none:
-					error = MdocHelpers.makeError(code: .bleNoData)
-				case BleTransferMode.END_DATA.first!: // 0x00:
-					delegate?.didReceiveRequest(readBuffer)
+				guard let prefix = data.first else { throw MdocHelpers.makeError(code: .bleNoData) }
+				guard prefix == 0 || prefix == 1 else { throw MdocHelpers.makeError(code: .bleNotSupported) }
+				if let message = try receiveBuffer.append(data.dropFirst(), isFinal: prefix == 0) {
 					status = .requestReceived
-				case BleTransferMode.START_DATA.first!: break
-				case let .some(byte):
-					logger.error("Unknown data prefix \(byte)")
-					error = MdocHelpers.makeError(code: .bleNotSupported)
+					delegate?.didReceiveRequest(message)
 				}
 			case MdocServiceCharacteristic.readerIdent.uuid:
 				logger.info("Ident")
@@ -266,6 +264,13 @@ extension MdocGattCentral: CBCentralManagerDelegate {
 		centralManager?.connect(peripheral, options: nil)
 		centralManager?.stopScan()
 	}
+
+    public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        guard self.peripheral === peripheral else { return }
+        self.peripheral = nil
+        disconnect()
+        if let error { self.error = error } else { status = .disconnected }
+    }
 
 	public func centralManager(_: CBCentralManager, didConnect peripheral: CBPeripheral) {
 		let serviceUuid = delegate?.deviceEngagement?.ble_uuid
@@ -309,8 +314,10 @@ extension MdocGattCentral: CBPeripheralDelegate {
 	public func peripheral(
 		_ peripheral: CBPeripheral,
 		didUpdateValueFor characteristic: CBCharacteristic,
-		error _: Error?
+		error: Error?
 	) {
+		guard self.peripheral === peripheral else { return }
+		if let error { self.error = error; return }
 		do {
 			try processData(peripheral: peripheral, characteristic: characteristic)
 		} catch {

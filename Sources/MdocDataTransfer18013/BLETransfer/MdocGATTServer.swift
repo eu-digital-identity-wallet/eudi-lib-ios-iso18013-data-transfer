@@ -117,6 +117,10 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
                         server.delegate?.didReceiveRequest(data)
                     }
                 } catch {
+                    if error is BleMessageBuffer.Failure {
+                        server.deleteEphemeralSessionKey()
+                        server.error = error
+                    }
                     peripheral.respond(to: first, withResult: .writeNotPermitted)
                     return
                 }
@@ -280,6 +284,8 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		guard let newValue else {
 			return
 		}
+		stopBleAdvertising()
+		clearSession()
 		status = .error
 		delegate?.didFinishedWithError(newValue)
 		logger.log(level: .error, "Transfer error \(newValue) (\(newValue.localizedDescription)")

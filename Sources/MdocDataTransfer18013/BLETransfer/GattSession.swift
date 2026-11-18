@@ -25,7 +25,8 @@ struct GattSession {
     private(set) var generation = UUID()
     private(set) var centralID: UUID?
     private(set) var subscriptions: Set<Characteristic> = []
-    private(set) var readBuffer = Data()
+    private var receiveBuffer = BleMessageBuffer()
+    var readBuffer: Data { receiveBuffer.data }
 
     var ready: Bool { subscriptions == [.state, .serverToClient] }
 
@@ -49,7 +50,7 @@ struct GattSession {
             guard value.count == 1, let byte = value.first, byte == 1 || byte == 2 else { throw Rejection.invalidValue }
             if byte == 1 {
                 guard status == .connected else { throw Rejection.invalidState }
-                readBuffer.removeAll()
+                receiveBuffer.reset()
                 return .started
             }
             guard [.connected, .started, .requestReceived, .userSelected, .responseSent].contains(status) else { throw Rejection.invalidState }
@@ -57,11 +58,13 @@ struct GattSession {
         case .clientToServer:
             guard status == .started else { throw Rejection.invalidState }
             guard let byte = value.first, byte == 0 || byte == 1 else { throw Rejection.invalidValue }
-            readBuffer.append(value.dropFirst())
-            if byte == 0 {
-                let request = readBuffer
-                readBuffer.removeAll()
-                return .request(request)
+            do {
+                if let request = try receiveBuffer.append(value.dropFirst(), isFinal: byte == 0) {
+                    return .request(request)
+                }
+            } catch {
+                reset()
+                throw error
             }
             return .fragment
         case .serverToClient:
