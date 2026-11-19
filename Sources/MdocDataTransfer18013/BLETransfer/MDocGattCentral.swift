@@ -134,7 +134,12 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		logger.error("Reader Ident verification or discovery failed; resuming discovery")
 		guard centralManager?.state == .poweredOn,
 			let uuid = delegate?.deviceEngagement?.ble_uuid else { return }
-		centralManager?.scanForPeripherals(withServices: [CBUUID(string: uuid)])
+		// Keep receiving foreground advertisements so a candidate can be retried after its cooldown.
+		// didDiscover filters cooling-down candidates and prevents concurrent connections.
+		centralManager?.scanForPeripherals(
+			withServices: [CBUUID(string: uuid)],
+			options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+		)
 		status = .qrEngagementReady
 	}
 
