@@ -214,7 +214,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 					try Self.checkEndRequest(state: data)
 					status = .disconnected
 				} catch let stateError {
-					logger.error("Invalid state \([UInt8](data))")
+					logger.debug("Invalid state frame (\(data.count) bytes)")
 					error = stateError
 				}
 			case MdocServiceCharacteristic.server2Client.uuid:
