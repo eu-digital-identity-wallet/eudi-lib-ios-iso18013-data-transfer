@@ -18,18 +18,25 @@ import CoreBluetooth
 import Foundation
 import os
 
+/// Mutable transport state is confined to the main queue, matching CoreBluetooth callbacks.
+/// Public synchronous access dispatches to main when needed. Callers must not block main
+/// while waiting for a background transport call. Delegate-owned state must follow the same rule.
 public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
-	var centralManager: CBCentralManager!
-	var peripheral: CBPeripheral?
-	var writeCharacteristic: CBCharacteristic?
-	var readCharacteristic: CBCharacteristic?
-	var stateCharacteristic: CBCharacteristic?
-	var hasReaderIdentity = false
-	var didSendStartRequest = false
-	var maximumCharacteristicSize: Int?
-	var readBuffer = Data()
-	var sendBuffer = [Data]()
-	public var error: Error? = nil {
+	private var centralManager: CBCentralManager!
+	private var peripheral: CBPeripheral?
+	private var writeCharacteristic: CBCharacteristic?
+	private var readCharacteristic: CBCharacteristic?
+	private var stateCharacteristic: CBCharacteristic?
+	private var hasReaderIdentity = false
+	private var didSendStartRequest = false
+	private var maximumCharacteristicSize: Int?
+	private var readBuffer = Data()
+	private var sendBuffer = [Data]()
+	public var error: Error? {
+		get { BleMainQueue.sync { storedError } }
+		set { BleMainQueue.sync { storedError = newValue } }
+	}
+	private var storedError: Error? = nil {
 		didSet {
 			if let error {
 				status = .error
@@ -37,8 +44,16 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 			}
 		}
 	}
-	public weak var delegate: (any MdocOfflineDelegate)?
-	public var status: TransferStatus = .initialized {
+	private weak var storedDelegate: (any MdocOfflineDelegate)?
+	public var delegate: (any MdocOfflineDelegate)? {
+		get { BleMainQueue.sync { storedDelegate } }
+		set { BleMainQueue.sync { storedDelegate = newValue } }
+	}
+	public var status: TransferStatus {
+		get { BleMainQueue.sync { storedStatus } }
+		set { BleMainQueue.sync { storedStatus = newValue } }
+	}
+	private var storedStatus: TransferStatus = .initialized {
 		didSet {
 			delegate?.didChangeStatus(status)
 		}
@@ -46,10 +61,12 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 
 	required public override init() {
 		super.init()
-		centralManager = CBCentralManager(delegate: self, queue: nil)
-		status = .initialized
-		if isBlePoweredOn {
-			handleCentralPoweredOn()
+		BleMainQueue.sync {
+			centralManager = CBCentralManager(delegate: self, queue: nil)
+			status = .initialized
+			if isBlePoweredOn {
+				handleCentralPoweredOn()
+			}
 		}
 	}
 
@@ -57,19 +74,19 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		disconnectFromDevice()
 	}
 
-    public func startBleAdvertising() {      
+    public func startBleAdvertising() {
     }
 
     public func stopBleAdvertising() {
     }
 
-    public var isBlePoweredOn: Bool { centralManager.state == .poweredOn }
+    public var isBlePoweredOn: Bool { BleMainQueue.sync { centralManager.state == .poweredOn } }
 
 	public var isAuthorized: Bool {
-		centralManager.state != .unauthorized
+		BleMainQueue.sync { centralManager.state != .unauthorized }
 	}
 	public var supportsL2cap: Bool { false }
-	
+
 	private func handleCentralPoweredOn() {
 		delegate?.didPoweredOn(isPeripheralManager: false)
 		status = .poweredOn
@@ -95,10 +112,12 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	public func disconnectFromDevice() {
-		if let stateCharacteristic {
-			peripheral?.writeValue(Data(BleTransferMode.END_REQUEST), for: stateCharacteristic, type: .withoutResponse)
+		BleMainQueue.sync {
+			if let stateCharacteristic {
+				peripheral?.writeValue(Data(BleTransferMode.END_REQUEST), for: stateCharacteristic, type: .withoutResponse)
+			}
+			disconnect()
 		}
-		disconnect()
 	}
 
 	private func disconnect() {
@@ -111,14 +130,16 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	public func sendData(_ data: Data) {
-		guard status == .requestReceived else {
-			logger.info("Unexpected write in status \(status)")
-			return
+		BleMainQueue.sync {
+			guard status == .requestReceived else {
+				logger.info("Unexpected write in status \(status)")
+				return
+			}
+			status = .userSelected
+			let blockSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
+			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: blockSize)
+			writeNextBlock()
 		}
-		status = .userSelected
-		let blockSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
-		sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: blockSize)
-		writeNextBlock()
 	}
 
 	private func writeNextBlock() {
@@ -154,7 +175,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		return nil
 	}
 
-	func processCharacteristics(
+	private func processCharacteristics(
 		peripheral: CBPeripheral,
 		characteristics: [CBCharacteristic]
 	) throws {
@@ -199,7 +220,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		guard data.first == BleTransferMode.END_REQUEST.first else { throw MdocHelpers.makeError(code: .bleInvalidStateByte) }
 	}
 
-	func processData(
+	private func processData(
 		peripheral: CBPeripheral,
 		characteristic: CBCharacteristic
 	) throws {
