@@ -23,6 +23,38 @@ import SwiftCBOR
 @testable import MdocDataTransfer18013
 
 struct SessionEncryptionTests {
+    @Test(arguments: [DeviceAuthMethod.deviceSignature, .deviceMac])
+    func consentPreviewDoesNotUseCredentialKey(method: DeviceAuthMethod) async throws {
+        let fixture = try await Fixture()
+        let storage = SessionTestKeyStorage()
+        var key = try await CoseKeyPrivate(secureArea: SoftwareSecureArea.create(storage: storage), keyOptions: .init(curve: .P256))
+        let publicKey = try await key.key
+        let item = try IssuerSignedItem(cbor: .map([
+            .utf8String("digestID"): .unsignedInt(0), .utf8String("random"): .byteString([0]),
+            .utf8String("elementIdentifier"): .utf8String("family_name"), .utf8String("elementValue"): .utf8String("test")
+        ]))
+        let mso = MobileSecurityObject(version: "1.0", digestAlgorithm: "SHA-256", valueDigests: .init(valueDigests: [:]),
+            deviceKey: publicKey, docType: IsoMdlModel.isoDocType,
+            validityInfo: .init(signed: "2026-01-01T00:00:00Z", validFrom: "2026-01-01T00:00:00Z", validUntil: "2030-01-01T00:00:00Z"))
+        let auth = IssuerAuth(mso: mso, msoRawData: mso.toCBOR(options: CBOROptions()).taggedEncoded.encode(),
+            verifyAlgorithm: .es256, signature: Data(repeating: 0, count: 64), x5chain: [[0]], statusList: nil)
+        let docs = ["credential": IssuerSigned(issuerNameSpaces: .init(nameSpaces: [IsoMdlModel.isoNamespace: [item]]), issuerAuth: auth)]
+        let reads = await storage.reads
+        let preview = try await fixture.decode(docs: docs, keys: ["credential": key], method: method).get()
+        #expect(preview.isValidRequest)
+        #expect(preview.userRequestInfo.itemsRequested[IsoMdlModel.isoDocType]?[IsoMdlModel.isoNamespace]?.map(\.elementIdentifier) == ["family_name"])
+        #expect(await storage.reads == reads)
+        // A cancelled preview stops here without any credential-key operation.
+        // Explicit approval still generates device authentication using the selected data.
+        let response = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: preview.deviceRequest,
+            issuerSigned: docs, docMetadata: [:],
+            selectedItems: ["credential": [IsoMdlModel.isoNamespace: [.init(elementIdentifier: "family_name")]]],
+            sessionEncryption: preview.sessionEncryption, eReaderKey: fixture.readerKey,
+            privateKeyObjects: ["credential": key], dauthMethod: method, unlockData: [:], authenticationContext: ThreadSafeAuthContext())
+        #expect(response?.deviceResponse.documents?.count == 1)
+        #expect(await storage.reads > reads)
+    }
+
     @Test func helperPreservesCountersAcrossByValueCalls() async throws {
         let fixture = try await Fixture()
         let first = try await MdocHelpers.getSessionDataToSend(sessionEncryption: fixture.session, status: .requestReceived, docToSend: .init(status: 0)).get()
@@ -114,7 +146,7 @@ struct SessionEncryptionTests {
             ]).encode())
         }
 
-        func decode(data: Data? = nil) async -> Result<Decoded, Error> {
+        func decode(data: Data? = nil, docs: [String: IssuerSigned] = [:], keys: [String: CoseKeyPrivate] = [:], method: DeviceAuthMethod = .deviceSignature) async -> Result<Decoded, Error> {
             do {
                 let request: CBOR = .map([
                     .utf8String("docType"): .utf8String(IsoMdlModel.isoDocType),
@@ -126,8 +158,8 @@ struct SessionEncryptionTests {
                 ])
                 let box = try AES.GCM.seal(Data(payload.encode()), using: readerSecret, nonce: nonce(1, device: false))
                 let encrypted = try #require(box.combined)
-                return await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: engagement, docs: [:], docMetadata: [:], trustValidator: NoReaderTrust(),
-                    requestData: data ?? establishment(ciphertext: Array(encrypted.dropFirst(12))), privateKeyObjects: [:], dauthMethod: .deviceSignature,
+                return await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: engagement, docs: docs, docMetadata: [:], trustValidator: NoReaderTrust(),
+                    requestData: data ?? establishment(ciphertext: Array(encrypted.dropFirst(12))), privateKeyObjects: keys, dauthMethod: method,
                     unlockData: [:], readerKeyRawData: nil, handOver: .null, authenticationContext: ThreadSafeAuthContext())
             } catch { return .failure(error) }
         }
@@ -155,10 +187,14 @@ private struct NoReaderTrust: CertificateTrustValidator {
 }
 
 private actor SessionTestKeyStorage: SecureKeyStorage {
+    private(set) var reads = 0
     var info: [String: [String: Data]] = [:]
     var data: [String: [Int: [String: Data]]] = [:]
     func readKeyInfo(id: String) async throws -> [String: Data] { info[id] ?? [:] }
-    func readKeyData(id: String, index: Int, authenticationContext: ThreadSafeAuthContext) async throws -> [String: Data] { data[id]?[index] ?? [:] }
+    func readKeyData(id: String, index: Int, authenticationContext: ThreadSafeAuthContext) async throws -> [String: Data] {
+        reads += 1
+        return data[id]?[index] ?? [:]
+    }
     func writeKeyInfo(id: String, dict: [String: Data]) async throws { info[id] = dict }
     func writeKeyDataBatch(id: String, startIndex: Int, dicts: [[String: Data]], keyOptions: KeyOptions?) async throws {
         for (offset, dict) in dicts.enumerated() { data[id, default: [:]][startIndex + offset] = dict }

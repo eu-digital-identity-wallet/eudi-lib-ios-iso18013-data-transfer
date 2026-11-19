@@ -60,6 +60,9 @@ struct MdocDataTransfer18013Tests {
 		]
 		for documents in requests {
 			let request = try deviceRequest(documents)
+			#expect(throws: NSError.self) {
+				try MdocHelpers.previewRequest(request, issuerSigned: [:], docMetadata: [:])
+			}
 			do {
 				_ = try await response(request, selectedItems: withSelectedItems ? [:] : nil)
 				Issue.record("Accepted duplicate or empty docType")
