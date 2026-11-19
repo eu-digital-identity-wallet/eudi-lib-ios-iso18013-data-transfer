@@ -184,7 +184,9 @@ public class MdocHelpers {
 					if certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)) {
 						let certificateIssuer = MdocHelpers.getCN(from: x509.subject.description)
 						do {
-							let itemsRequestRawData = docR.itemsRequestRawData!
+							guard let itemsRequestRawData = docR.itemsRequestRawData else {
+								throw Self.makeError(code: .requestDecodeError)
+							}
 							let (isValidated, validationMessage) = try await mdocAuth.validateReaderAuth(
 								readerAuthCBOR: readerAuthRawCBOR,
 								readerAuthX5c: certData,
@@ -291,7 +293,9 @@ public class MdocHelpers {
 		var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
 		var resMetadata = [Data?]()
-		guard deviceRequest != nil || selectedItems != nil else { fatalError("Invalid call") }
+		guard deviceRequest != nil || selectedItems != nil else {
+			throw Self.makeError(code: .requestDecodeError)
+		}
 		let sessionTranscript = sessionEncryption?.sessionTranscript ?? sessionTranscript
 		let haveSelectedItems = selectedItems != nil
 		// doc.id's (if have selected items), otherwise doc.types
