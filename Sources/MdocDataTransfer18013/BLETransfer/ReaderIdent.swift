@@ -9,7 +9,8 @@ enum ReaderIdent {
         // Use the actual QR engagement rather than re-encoding the public COSE key.
         guard let engagement,
               let cbor = try? CBOR.decode(engagement),
-              case let .array(security)? = cbor[1], security.count == 2,
+              case let .map(fields) = cbor,
+              case let .array(security)? = fields[1], security.count == 2,
               case .unsignedInt(1) = security[0],
               case let .tagged(tag, .byteString(keyBytes)) = security[1],
               tag == CBOR.Tag(rawValue: 24), !keyBytes.isEmpty else { return nil }
