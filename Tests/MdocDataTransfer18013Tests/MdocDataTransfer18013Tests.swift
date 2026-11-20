@@ -23,6 +23,15 @@ import SwiftCBOR
 @testable import MdocDataTransfer18013
 
 struct MdocDataTransfer18013Tests {
+	@Test func missingRequestAndSelectionThrowsInsteadOfAborting() async {
+		do {
+			_ = try await response(nil, selectedItems: nil)
+			Issue.record("Missing request and selection were accepted")
+		} catch {
+			#expect((error as NSError).domain == "MdocHelpers")
+			#expect((error as NSError).code == ErrorCode.requestDecodeError.rawValue)
+		}
+	}
 	@Test func statusOnlyErrorDoesNotRequireEncryption() async throws {
 		// BLE prepares this fallback before preparing the real response. It must
 		// not require a key or consume a counter for ciphertext that is discarded.
@@ -60,6 +69,9 @@ struct MdocDataTransfer18013Tests {
 		]
 		for documents in requests {
 			let request = try deviceRequest(documents)
+			#expect(throws: NSError.self) {
+				try MdocHelpers.previewRequest(request, issuerSigned: [:], docMetadata: [:])
+			}
 			do {
 				_ = try await response(request, selectedItems: withSelectedItems ? [:] : nil)
 				Issue.record("Accepted duplicate or empty docType")

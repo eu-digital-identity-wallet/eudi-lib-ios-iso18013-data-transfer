@@ -104,6 +104,9 @@ public class MdocHelpers {
 	///   - handOver: handOver structure
 	/// - Returns: A ``DeviceRequest`` object
 
+	/// Preview resolves availability only; credential keys and unlock data are retained
+	/// in this signature for source compatibility and are not used for device authentication.
+	/// The authentication context is still used to decrypt the session request.
 	public static func decodeRequestAndInformUser(
 		deviceEngagement: DeviceEngagement?,
 		docs: [String: IssuerSigned],
@@ -150,24 +153,9 @@ public class MdocHelpers {
 			}
 			let requestData = try await sessionEncryption.decrypt(requestCipherData)
 			let deviceRequest = try DeviceRequest(data: requestData)
-			let requestResponse = try await Self.getDeviceResponseToSend(
-				deviceRequest: deviceRequest,
-				issuerSigned: docs,
-				docMetadata: docMetadata,
-				selectedItems: nil,
-				sessionEncryption: sessionEncryption,
-				eReaderKey: sessionEncryption.sessionKeys.publicKey,
-				privateKeyObjects: privateKeyObjects,
-				dauthMethod: dauthMethod,
-				signatureAlgorithm: signatureAlgorithm,
-				unlockData: unlockData,
-				authenticationContext: authenticationContext
-			)
-			guard let (previewDeviceResponse, validRequestItems, _, _, _, _) = requestResponse else {
-				logger.error("Valid request items nil")
-				return .failure(Self.makeError(code: .requestDecodeError))
-			}
-			let isInvalidRequest = (previewDeviceResponse.documents == nil)
+			let preview = try Self.previewRequest(deviceRequest, issuerSigned: docs, docMetadata: docMetadata)
+			let validRequestItems = preview.validRequestItems
+			let isInvalidRequest = !preview.isValidRequest
 			let requestedDocDataFormats = docs.mapValues { _ in DocDataFormat.cbor }
 			var userRequestInfo = UserRequestInfo(
 				docDataFormats: requestedDocDataFormats,
@@ -184,7 +172,9 @@ public class MdocHelpers {
 					if certData.count > 0, let x509 = try? X509.Certificate(derEncoded: [UInt8](certData.first!)) {
 						let certificateIssuer = MdocHelpers.getCN(from: x509.subject.description)
 						do {
-							let itemsRequestRawData = docR.itemsRequestRawData!
+							guard let itemsRequestRawData = docR.itemsRequestRawData else {
+								throw Self.makeError(code: .requestDecodeError)
+							}
 							let (isValidated, validationMessage) = try await mdocAuth.validateReaderAuth(
 								readerAuthCBOR: readerAuthRawCBOR,
 								readerAuthX5c: certData,
@@ -278,20 +268,14 @@ public class MdocHelpers {
 		// Both disclosure and reader-authentication results are indexed by docType.
 		// Reject ambiguous keys before previewing or signing any document, including
 		// when selectedItems is supplied. Empty keys are reserved for request-wide auth.
-		if let deviceRequest {
-			var docTypes = Set<DocType>()
-			for request in deviceRequest.docRequests {
-				let docType = request.itemsRequest.docType
-				guard !docType.isEmpty, docTypes.insert(docType).inserted else {
-					throw Self.makeError(code: .requestDecodeError)
-				}
-			}
-		}
+		if let deviceRequest { try validateRequestedDocTypes(deviceRequest) }
 		var docFiltered = [Document](); var docIdsFiltered = [String]();
 		var docErrors = [[DocType: UInt64]]()
 		var validReqItemsDocDict = RequestItems(); var errorReqItemsDocDict = RequestItems()
 		var resMetadata = [Data?]()
-		guard deviceRequest != nil || selectedItems != nil else { fatalError("Invalid call") }
+		guard deviceRequest != nil || selectedItems != nil else {
+			throw Self.makeError(code: .requestDecodeError)
+		}
 		let sessionTranscript = sessionEncryption?.sessionTranscript ?? sessionTranscript
 		let haveSelectedItems = selectedItems != nil
 		// doc.id's (if have selected items), otherwise doc.types

@@ -25,6 +25,26 @@ struct SelectedItemsTests {
 	private static let namespace = IsoMdlModel.isoNamespace
 	private static let otherNamespace = "example.extra"
 
+	@Test func previewMatchesResponseAvailabilityWithoutReadingKeys() async throws {
+		let fixture = try await Fixture()
+		for elements in [["family_name", "missing"], ["missing"], ["age_over_18", "age_over_21", "age_over_65"]] {
+			let request = try deviceRequest(elements)
+			let reads = await fixture.storage.reads
+			let preview = try MdocHelpers.previewRequest(request, issuerSigned: ["doc-1": fixture.credential], docMetadata: ["doc-1": Data([1])])
+			#expect(await fixture.storage.reads == reads)
+			let signed = try await fixture.respond(selected: nil, request: request)
+			#expect(preview.validRequestItems == signed.valid)
+			#expect(preview.errorRequestItems.mapValues { $0.mapValues { $0.map(\.elementIdentifier).sorted() } }
+				== signed.errors.mapValues { $0.mapValues { $0.map(\.elementIdentifier).sorted() } })
+			#expect(preview.isValidRequest == (signed.response.documents != nil))
+			#expect(preview.responseMetadata == signed.metadata)
+		}
+		let unavailable = try MdocHelpers.previewRequest(deviceRequest(["family_name"], docType: "unknown"),
+			issuerSigned: ["doc-1": fixture.credential], docMetadata: [:])
+		#expect(!unavailable.isValidRequest)
+		#expect(unavailable.errorRequestItems["unknown"] == [:])
+	}
+
 	@Test(arguments: [false, true])
 	func emptySelectionsPresentSignedDocumentsWithoutClaims(withRequest: Bool) async throws {
 		let fixture = try await Fixture()

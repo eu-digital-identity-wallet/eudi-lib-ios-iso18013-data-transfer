@@ -18,19 +18,29 @@ import CoreBluetooth
 import Foundation
 import os
 
+/// Mutable transport state is confined to the main queue, matching CoreBluetooth callbacks.
+/// Public synchronous access dispatches to main when needed. Callers must not block main
+/// while waiting for a background transport call. Delegate-owned state must follow the same rule.
 public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
-	var centralManager: CBCentralManager!
-	var peripheral: CBPeripheral?
+	private var centralManager: CBCentralManager!
+	private var peripheral: CBPeripheral?
+	// Internal state is also used by tests, which must access it on the main queue.
 	var writeCharacteristic: CBCharacteristic?
 	var readCharacteristic: CBCharacteristic?
 	var stateCharacteristic: CBCharacteristic?
 	var hasReaderIdentity = false
+	private var identityTimeout: DispatchWorkItem?
+	private var rejectedCandidates: [UUID: Date] = [:]
 	var didSendStartRequest = false
 	var maximumCharacteristicSize: Int?
 	private var receiveBuffer = BleMessageBuffer()
 	var readBuffer: Data { receiveBuffer.data }
 	var sendBuffer = [Data]()
-	public var error: Error? = nil {
+	public var error: Error? {
+		get { BleMainQueue.sync { storedError } }
+		set { BleMainQueue.sync { storedError = newValue } }
+	}
+	private var storedError: Error? = nil {
 		didSet {
 			if let error {
 				disconnect()
@@ -39,39 +49,58 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 			}
 		}
 	}
-	public weak var delegate: (any MdocOfflineDelegate)?
-	public var status: TransferStatus = .initialized {
+	private weak var storedDelegate: (any MdocOfflineDelegate)?
+	public var delegate: (any MdocOfflineDelegate)? {
+		get { BleMainQueue.sync { storedDelegate } }
+		set { BleMainQueue.sync { storedDelegate = newValue } }
+	}
+	public var status: TransferStatus {
+		get { BleMainQueue.sync { storedStatus } }
+		set { BleMainQueue.sync { storedStatus = newValue } }
+	}
+	private var storedStatus: TransferStatus = .initialized {
 		didSet {
 			delegate?.didChangeStatus(status)
 		}
 	}
 
-	required public override init() {
+	required public override convenience init() {
+		self.init(initializeBluetooth: true)
+	}
+
+	init(initializeBluetooth: Bool) {
 		super.init()
-		centralManager = CBCentralManager(delegate: self, queue: nil)
-		status = .initialized
-		if isBlePoweredOn {
-			handleCentralPoweredOn()
+		guard initializeBluetooth else { return }
+		BleMainQueue.sync {
+			centralManager = CBCentralManager(delegate: self, queue: nil)
+			status = .initialized
+			if isBlePoweredOn {
+				handleCentralPoweredOn()
+			}
 		}
 	}
 
 	public func stop() {
-		disconnectFromDevice()
+		BleMainQueue.sync {
+			centralManager?.stopScan()
+			rejectedCandidates.removeAll()
+			disconnectFromDevice()
+		}
 	}
 
-    public func startBleAdvertising() {      
+    public func startBleAdvertising() {
     }
 
     public func stopBleAdvertising() {
     }
 
-    public var isBlePoweredOn: Bool { centralManager.state == .poweredOn }
+    public var isBlePoweredOn: Bool { BleMainQueue.sync { centralManager.state == .poweredOn } }
 
 	public var isAuthorized: Bool {
-		centralManager.state != .unauthorized
+		BleMainQueue.sync { centralManager.state != .unauthorized }
 	}
 	public var supportsL2cap: Bool { false }
-	
+
 	private func handleCentralPoweredOn() {
 		delegate?.didPoweredOn(isPeripheralManager: false)
 		status = .poweredOn
@@ -86,7 +115,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	private func tryStartRequestIfReady() {
-		guard hasReaderIdentity, !didSendStartRequest, let peripheral, let readCharacteristic, let stateCharacteristic else {
+		guard hasReaderIdentity, !didSendStartRequest, writeCharacteristic != nil, let peripheral, let readCharacteristic, let stateCharacteristic else {
 			return
 		}
 		peripheral.setNotifyValue(true, for: readCharacteristic)
@@ -97,32 +126,72 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	public func disconnectFromDevice() {
-		if let stateCharacteristic {
-			peripheral?.writeValue(Data(BleTransferMode.END_REQUEST), for: stateCharacteristic, type: .withoutResponse)
+		BleMainQueue.sync {
+			if didSendStartRequest, let stateCharacteristic {
+				peripheral?.writeValue(Data(BleTransferMode.END_REQUEST), for: stateCharacteristic, type: .withoutResponse)
+			}
+			disconnect()
 		}
-		disconnect()
 	}
 
 	private func disconnect() {
 		receiveBuffer.reset()
 		sendBuffer.removeAll()
-		if let peripheral {
-			centralManager.cancelPeripheralConnection(peripheral)
-			self.peripheral = nil
-		}
+		identityTimeout?.cancel()
+		identityTimeout = nil
+		let previous = peripheral
+		peripheral = nil
+		previous?.delegate = nil
+		if let previous { centralManager?.cancelPeripheralConnection(previous) }
 		hasReaderIdentity = false
 		didSendStartRequest = false
+		writeCharacteristic = nil
+		readCharacteristic = nil
+		stateCharacteristic = nil
+		maximumCharacteristicSize = nil
+		readBuffer.removeAll()
+		sendBuffer.removeAll()
+	}
+
+	// Candidate failures are recoverable; the terminal error callback would end engagement.
+	func rejectReaderCandidate() {
+		BleMainQueue.sync {
+			if let peripheral { rejectedCandidates[peripheral.identifier] = Date().addingTimeInterval(30) }
+			disconnect()
+			logger.error("Reader Ident verification or discovery failed; resuming discovery")
+			guard centralManager?.state == .poweredOn,
+				let uuid = delegate?.deviceEngagement?.ble_uuid else { return }
+			// Keep receiving foreground advertisements so a candidate can be retried after its cooldown.
+			// didDiscover filters cooling-down candidates and prevents concurrent connections.
+			centralManager?.scanForPeripherals(
+				withServices: [CBUUID(string: uuid)],
+				options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+			)
+			status = .qrEngagementReady
+		}
+	}
+
+	private func scheduleIdentityTimeout() {
+		identityTimeout?.cancel()
+		let timeout = DispatchWorkItem { [weak self] in
+			guard let self, self.peripheral != nil, !self.hasReaderIdentity else { return }
+			self.rejectReaderCandidate()
+		}
+		identityTimeout = timeout
+		DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
 	}
 
 	public func sendData(_ data: Data) {
-		guard status == .requestReceived else {
-			logger.info("Unexpected write in status \(status)")
-			return
+		BleMainQueue.sync {
+			guard status == .requestReceived else {
+				logger.info("Unexpected write in status \(status)")
+				return
+			}
+			status = .userSelected
+			let blockSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
+			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: blockSize)
+			writeNextBlock()
 		}
-		status = .userSelected
-		let blockSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
-		sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: blockSize)
-		writeNextBlock()
 	}
 
 	private func writeNextBlock() {
@@ -148,8 +217,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	) throws -> CBCharacteristic? {
 		if let characteristic = list.first(where: { $0.uuid == mdocChar.uuid }) {
 			for property in properties where !characteristic.properties.contains(property) {
-				logger.info("Characteristic \(mdocChar.description) is expected to have \(description) properties")
-				break
+				throw makePeripheralError("Missing required \(description) properties for \(mdocChar.description)")
 			}
 			return characteristic
 		} else {
@@ -158,7 +226,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		return nil
 	}
 
-	func processCharacteristics(
+	private func processCharacteristics(
 		peripheral: CBPeripheral,
 		characteristics: [CBCharacteristic]
 	) throws {
@@ -184,14 +252,15 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 			properties: readProperties,
 			description: "notify"
 		)
-		if let readerIdent = try getCharacteristic(
+		guard let readerIdent = try getCharacteristic(
 			list: characteristics,
 			mdocChar: .readerIdent,
 			properties: readerIdentityProperties,
 			description: "read"
-		) {
-			peripheral.readValue(for: readerIdent)
+		), stateCharacteristic != nil, writeCharacteristic != nil, readCharacteristic != nil else {
+			throw makePeripheralError("Missing required BLE characteristic")
 		}
+		peripheral.readValue(for: readerIdent)
 		let negotiatedMaximumCharacteristicSize = peripheral.maximumWriteValueLength(for: .withoutResponse)
 		maximumCharacteristicSize = min(negotiatedMaximumCharacteristicSize - 3, 512)
 		tryStartRequestIfReady()
@@ -203,10 +272,23 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		guard data.first == BleTransferMode.END_REQUEST.first else { throw MdocHelpers.makeError(code: .bleInvalidStateByte) }
 	}
 
-	func processData(
+	private func processData(
 		peripheral: CBPeripheral,
 		characteristic: CBCharacteristic
 	) throws {
+		guard peripheral === self.peripheral else { return }
+		if characteristic.uuid == MdocServiceCharacteristic.readerIdent.uuid {
+			guard ReaderIdent.matches(characteristic.value, engagement: delegate?.deviceEngagement?.qrCoded) else {
+				rejectReaderCandidate()
+				return
+			}
+			hasReaderIdentity = true
+			identityTimeout?.cancel()
+			identityTimeout = nil
+			tryStartRequestIfReady()
+			return
+		}
+		guard hasReaderIdentity, didSendStartRequest else { return }
 		if let data = characteristic.value {
 			let characteristicDescription =
 				MdocServiceCharacteristic(uuid: characteristic.uuid)?.description
@@ -219,7 +301,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 					disconnect()
 					status = .disconnected
 				} catch let stateError {
-					logger.error("Invalid state \([UInt8](data))")
+					logger.debug("Invalid state frame (\(data.count) bytes)")
 					error = stateError
 				}
 			case MdocServiceCharacteristic.server2Client.uuid:
@@ -231,10 +313,6 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 					guard self.peripheral === peripheral else { return }
 					delegate?.didReceiveRequest(message)
 				}
-			case MdocServiceCharacteristic.readerIdent.uuid:
-				logger.info("Ident")
-				hasReaderIdentity = true
-				tryStartRequestIfReady()
 			case let uuid:
 				logger.error("Unknown characteristic \(uuid)")
 				error = MdocHelpers.makeError(code: .bleNotSupported)
@@ -260,11 +338,30 @@ extension MdocGattCentral: CBCentralManagerDelegate {
 		advertisementData _: [String: Any],
 		rssi _: NSNumber
 	) {
+		guard self.peripheral == nil else { return }
+		rejectedCandidates = rejectedCandidates.filter { $0.value > Date() }
+		guard rejectedCandidates[peripheral.identifier] == nil else { return }
 		logger.info("Discovered peripheral")
 		peripheral.delegate = self
 		self.peripheral = peripheral
 		centralManager?.connect(peripheral, options: nil)
 		centralManager?.stopScan()
+		scheduleIdentityTimeout()
+	}
+
+	public func centralManager(_: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+		guard peripheral === self.peripheral else { return }
+		rejectReaderCandidate()
+	}
+
+	public func centralManager(_: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+		guard peripheral === self.peripheral else { return }
+		if !hasReaderIdentity {
+			rejectReaderCandidate()
+		} else {
+			disconnect()
+			status = .disconnected
+		}
 	}
 
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
@@ -275,8 +372,12 @@ extension MdocGattCentral: CBCentralManagerDelegate {
     }
 
 	public func centralManager(_: CBCentralManager, didConnect peripheral: CBPeripheral) {
-		let serviceUuid = delegate?.deviceEngagement?.ble_uuid
-		peripheral.discoverServices([CBUUID(string: serviceUuid ?? "")])
+		guard peripheral === self.peripheral else { return }
+		guard let serviceUuid = delegate?.deviceEngagement?.ble_uuid else {
+			rejectReaderCandidate()
+			return
+		}
+		peripheral.discoverServices([CBUUID(string: serviceUuid)])
 		delegate?.didConnected(isPeripheral: true, deviceName: peripheral.name)
 		status = .connected
 		tryStartRequestIfReady()
@@ -285,31 +386,28 @@ extension MdocGattCentral: CBCentralManagerDelegate {
 
 extension MdocGattCentral: CBPeripheralDelegate {
 	public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-		if let error {
-			self.error = error
+		guard peripheral === self.peripheral else { return }
+		guard error == nil, let services = peripheral.services, !services.isEmpty else {
+			rejectReaderCandidate()
 			return
 		}
-		if let services = peripheral.services {
-			logger.info("Discovered services")
-			for service in services {
-				peripheral.discoverCharacteristics(nil, for: service)
-			}
+		logger.info("Discovered services")
+		for service in services {
+			peripheral.discoverCharacteristics(nil, for: service)
 		}
 	}
 
 	public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-		if let error {
-			self.error = error
+		guard peripheral === self.peripheral else { return }
+		guard error == nil, let characteristics = service.characteristics else {
+			rejectReaderCandidate()
 			return
 		}
-		if let characteristics = service.characteristics {
-			logger.info("Discovered characteristics")
-			do {
-				try processCharacteristics(peripheral: peripheral, characteristics: characteristics)
-			} catch {
-				self.error = error
-				centralManager?.cancelPeripheralConnection(peripheral)
-			}
+		logger.info("Discovered characteristics")
+		do {
+			try processCharacteristics(peripheral: peripheral, characteristics: characteristics)
+		} catch {
+			rejectReaderCandidate()
 		}
 	}
 
@@ -318,8 +416,13 @@ extension MdocGattCentral: CBPeripheralDelegate {
 		didUpdateValueFor characteristic: CBCharacteristic,
 		error: Error?
 	) {
-		guard self.peripheral === peripheral else { return }
-		if let error { self.error = error; return }
+		guard peripheral === self.peripheral else { return }
+		if let error {
+			if !hasReaderIdentity || characteristic.uuid == MdocServiceCharacteristic.readerIdent.uuid {
+				rejectReaderCandidate()
+			} else { self.error = error }
+			return
+		}
 		do {
 			try processData(peripheral: peripheral, characteristic: characteristic)
 		} catch {
@@ -328,12 +431,14 @@ extension MdocGattCentral: CBPeripheralDelegate {
 		}
 	}
 
-	public func peripheralIsReady(toSendWriteWithoutResponse _: CBPeripheral) {
+	public func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+		guard peripheral === self.peripheral, hasReaderIdentity else { return }
 		writeNextBlock()
 	}
 
 	public func peripheral(_ peripheral: CBPeripheral, didModifyServices _: [CBService]) {
-		disconnectFromDevice()
+		guard peripheral === self.peripheral else { return }
+		if !hasReaderIdentity { rejectReaderCandidate() } else { disconnectFromDevice() }
 	}
 }
 
