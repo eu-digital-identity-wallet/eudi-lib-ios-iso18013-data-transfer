@@ -31,7 +31,7 @@ import MdocSecurity18013
 public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	private var peripheralManager: CBPeripheralManager!
 	private var bleDelegate: Delegate!
-	private var remoteCentral: CBCentral?
+	var remoteCentral: CBCentral?
 	private var stateCharacteristic: CBMutableCharacteristic!
 	private var server2ClientCharacteristic: CBMutableCharacteristic!
 	private weak var storedDelegate: (any MdocOfflineDelegate)?
@@ -69,32 +69,38 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			delegate?.didChangeStatus(status)
 		}
 	}
-	private var session = GattSession()
-	private var sendBuffer = [Data]()
+	var session = GattSession()
+	var sendBuffer = [Data]()
 	private var initSuccess:Bool = false
 
-	required public init() {
+	required public convenience init() {
+		self.init(initializeBluetooth: true)
+	}
+
+	init(initializeBluetooth: Bool) {
 		BleMainQueue.sync {
 			status = .initialized
-			initPeripheralManager()
+			if initializeBluetooth { initPeripheralManager() }
 		}
 	}
 
 	@objc(CBPeripheralManagerDelegate)
 	class Delegate: NSObject, CBPeripheralManagerDelegate {
-		unowned var server: MdocGattServer
+		weak var server: MdocGattServer?
 
 		init(server: MdocGattServer) {
 			self.server = server
 		}
 
 		func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+			guard let server else { return }
 			if !server.sendBuffer.isEmpty {
-				self.server.sendDataWithUpdates()
+				server.sendDataWithUpdates()
 			}
 		}
 
 		func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
+			guard let server else { return }
 			let stateDescription: String
 			switch peripheral.state {
 			case .poweredOn:
@@ -115,6 +121,10 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 
         func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
             guard let first = requests.first else { return }
+            guard let server else {
+                peripheral.respond(to: first, withResult: .unlikelyError)
+                return
+            }
             for request in requests {
                 guard let characteristic = Self.sessionCharacteristic(request.characteristic),
                       let value = request.value, request.offset == 0 else {
@@ -161,7 +171,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 
         public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral,
                                       didSubscribeTo characteristic: CBCharacteristic) {
-            guard let kind = Self.sessionCharacteristic(characteristic),
+            guard let server, let kind = Self.sessionCharacteristic(characteristic),
                   server.session.subscribe(kind, central: central.identifier, status: server.status) else { return }
             server.remoteCentral = central
             server.stopBleAdvertising()
@@ -173,7 +183,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 
         public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral,
                                       didUnsubscribeFrom characteristic: CBCharacteristic) {
-            guard let kind = Self.sessionCharacteristic(characteristic),
+            guard let server, let kind = Self.sessionCharacteristic(characteristic),
                   server.session.acceptsUnsubscribe(kind, central: central.identifier) else { return }
             server.endSession()
         }
@@ -223,8 +233,9 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 			if peripheralManager.state == .poweredOn {
 				logger.info("Peripheral manager powered on")
 				error = nil
-				guard let serviceUuid = sessionDelegate.deviceEngagement?.ble_uuid else {
+				guard let serviceUuid = delegate?.deviceEngagement?.ble_uuid else {
 					logger.error("BLE initialization error")
+					error = MdocHelpers.makeError(code: .deviceEngagementMissing)
 					return
 				}
 				buildServices(uuid: serviceUuid)
@@ -238,14 +249,14 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 				advertising = true
 				status = .qrEngagementReady
 			} else {
-			// once bt is powered on, advertise
-			if peripheralManager.state == .resetting {
-				DispatchQueue.main.asyncAfter(deadline: .now()+1) {
-					self.startBleAdvertising()
+				// once bt is powered on, advertise
+				if peripheralManager.state == .resetting {
+					DispatchQueue.main.asyncAfter(deadline: .now()+1) {
+						self.startBleAdvertising()
+					}
+				} else {
+					logger.info("Peripheral manager powered off")
 				}
-			} else {
-				logger.info("Peripheral manager powered off")
-			}
 			}
 		}
 	}
@@ -262,10 +273,10 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	}
 
     private func deleteEphemeralSessionKey() {
-        guard let key = sessionDelegate.deviceEngagement?.privateKey else { return }
+        guard let delegate, let key = delegate.deviceEngagement?.privateKey else { return }
         // Detach this engagement's key before asynchronous deletion, so teardown
         // cannot delete a key belonging to a subsequent presentation.
-        sessionDelegate.deviceEngagement?.privateKey = nil
+        delegate.deviceEngagement?.privateKey = nil
         Task {
             try? await key.secureArea.deleteKeyBatch(id: key.privateKeyId, startIndex: 0, batchSize: 1)
         }
@@ -287,7 +298,7 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
     public func stop() {
 		BleMainQueue.sync {
 			stopBleAdvertising()
-			sessionDelegate.qrCodePayload = nil
+			delegate?.qrCodePayload = nil
 			clearSession()
 			deleteEphemeralSessionKey()
 			if status == .error {
