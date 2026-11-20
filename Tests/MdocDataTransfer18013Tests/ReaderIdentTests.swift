@@ -40,7 +40,7 @@ struct ReaderIdentTests {
         }
     }
 
-    @Test func rejectionClearsCandidateStateWithoutEndingEngagement() {
+    @Test @MainActor func rejectionClearsCandidateStateWithoutEndingEngagement() {
         let central = MdocGattCentral(initializeBluetooth: false)
         central.hasReaderIdentity = true
         central.didSendStartRequest = true

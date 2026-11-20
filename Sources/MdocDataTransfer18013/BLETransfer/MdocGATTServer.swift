@@ -25,36 +25,63 @@ import MdocDataModel18013
 import MdocSecurity18013
 
 /// BLE Gatt server implementation of mdoc transfer manager
+/// Mutable transport state is confined to the main queue, matching CoreBluetooth callbacks.
+/// Public synchronous access dispatches to main when needed. Callers must not block main
+/// while waiting for a background transport call. Delegate-owned state must follow the same rule.
 public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
-	var peripheralManager: CBPeripheralManager!
-	var bleDelegate: Delegate!
+	private var peripheralManager: CBPeripheralManager!
+	private var bleDelegate: Delegate!
 	var remoteCentral: CBCentral?
-	var stateCharacteristic: CBMutableCharacteristic!
-	var server2ClientCharacteristic: CBMutableCharacteristic!
-	public weak var delegate: (any MdocOfflineDelegate)?
+	private var stateCharacteristic: CBMutableCharacteristic!
+	private var server2ClientCharacteristic: CBMutableCharacteristic!
+	private weak var storedDelegate: (any MdocOfflineDelegate)?
+	public var delegate: (any MdocOfflineDelegate)? {
+		get { BleMainQueue.sync { storedDelegate } }
+		set { BleMainQueue.sync { storedDelegate = newValue } }
+	}
 
-	public var advertising: Bool = false
-	public var error: Error? = nil {
+	private var sessionDelegate: any MdocOfflineDelegate {
+		guard let delegate else {
+			fatalError("MdocOfflineDelegate must be set before using MdocGattServer")
+		}
+		return delegate
+	}
+	private var storedAdvertising = false
+	public var advertising: Bool {
+		get { BleMainQueue.sync { storedAdvertising } }
+		set { BleMainQueue.sync { storedAdvertising = newValue } }
+	}
+	public var error: Error? {
+		get { BleMainQueue.sync { storedError } }
+		set { BleMainQueue.sync { storedError = newValue } }
+	}
+	private var storedError: Error? = nil {
 		didSet {
 			handleErrorSet(error)
 		}
 	}
-	public var status: TransferStatus = .initializing {
+	public var status: TransferStatus {
+		get { BleMainQueue.sync { storedStatus } }
+		set { BleMainQueue.sync { storedStatus = newValue } }
+	}
+	private var storedStatus: TransferStatus = .initializing {
 		didSet {
 			delegate?.didChangeStatus(status)
 		}
 	}
 	var session = GattSession()
 	var sendBuffer = [Data]()
-	var initSuccess:Bool = false
+	private var initSuccess:Bool = false
 
 	required public convenience init() {
 		self.init(initializeBluetooth: true)
 	}
 
 	init(initializeBluetooth: Bool) {
-		status = .initialized
-		if initializeBluetooth { initPeripheralManager() }
+		BleMainQueue.sync {
+			status = .initialized
+			if initializeBluetooth { initPeripheralManager() }
+		}
 	}
 
 	@objc(CBPeripheralManagerDelegate)
@@ -112,12 +139,17 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
                     case .ended: server.endSession()
                     case .fragment: break
                     case let .request(data):
-                        let generation = server.session.generation
+                        let generation = server.session.generation
+
                         server.status = .requestReceived
-                        guard server.session.generation == generation else {
-                            peripheral.respond(to: first, withResult: .writeNotPermitted)
-                            return
-                        }
+                        guard server.session.generation == generation else {
+
+                            peripheral.respond(to: first, withResult: .writeNotPermitted)
+
+                            return
+
+                        }
+
                         server.delegate?.didReceiveRequest(data)
                     }
                 } catch {
@@ -159,11 +191,11 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	}
 
 	/// Returns true if the peripheralManager state is poweredOn
-	public var isBlePoweredOn: Bool { peripheralManager.state == .poweredOn }
-	
+	public var isBlePoweredOn: Bool { BleMainQueue.sync { peripheralManager.state == .poweredOn } }
+
 	public var supportsL2cap: Bool { false }
-	
-	func buildServices(uuid: String) {
+
+	private func buildServices(uuid: String) {
 		let bleUserService = CBMutableService(type: CBUUID(string: uuid), primary: true)
 		let stateProperties: CBCharacteristicProperties = [.notify, .writeWithoutResponse]
 		let clientToServerProperties: CBCharacteristicProperties = [.writeWithoutResponse]
@@ -193,46 +225,51 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	}
 
 	public func startBleAdvertising() {
-		guard !isInErrorState, session.centralID == nil else {
-			logger.info("Current status is \(status)")
-			return
-		}
-		if peripheralManager.state == .poweredOn {
-			logger.info("Peripheral manager powered on")
-			error = nil
-			guard let serviceUuid = delegate?.deviceEngagement?.ble_uuid else {
-				error = MdocHelpers.makeError(code: .deviceEngagementMissing)
+		BleMainQueue.sync {
+			guard !isInErrorState, session.centralID == nil else {
+				logger.info("Current status is \(status)")
 				return
 			}
-			buildServices(uuid: serviceUuid)
-			let advertisedServiceUuids = [CBUUID(string: serviceUuid)]
-			let advertisementData: [String: Any] = [
-				CBAdvertisementDataServiceUUIDsKey: advertisedServiceUuids,
-				CBAdvertisementDataLocalNameKey: serviceUuid
-			]
-			// advertise the peripheral with the short UUID
-			peripheralManager.startAdvertising(advertisementData)
-			advertising = true
-			status = .qrEngagementReady
-		} else {
-		// once bt is powered on, advertise
-		if peripheralManager.state == .resetting {
-			DispatchQueue.main.asyncAfter(deadline: .now()+1) {
-				self.startBleAdvertising()
+			if peripheralManager.state == .poweredOn {
+				logger.info("Peripheral manager powered on")
+				error = nil
+				guard let serviceUuid = delegate?.deviceEngagement?.ble_uuid else {
+					logger.error("BLE initialization error")
+					error = MdocHelpers.makeError(code: .deviceEngagementMissing)
+					return
+				}
+				buildServices(uuid: serviceUuid)
+				let advertisedServiceUuids = [CBUUID(string: serviceUuid)]
+				let advertisementData: [String: Any] = [
+					CBAdvertisementDataServiceUUIDsKey: advertisedServiceUuids,
+					CBAdvertisementDataLocalNameKey: serviceUuid
+				]
+				// advertise the peripheral with the short UUID
+				peripheralManager.startAdvertising(advertisementData)
+				advertising = true
+				status = .qrEngagementReady
+			} else {
+				// once bt is powered on, advertise
+				if peripheralManager.state == .resetting {
+					DispatchQueue.main.asyncAfter(deadline: .now()+1) {
+						self.startBleAdvertising()
+					}
+				} else {
+					logger.info("Peripheral manager powered off")
+				}
 			}
-		} else {
-			logger.info("Peripheral manager powered off")
-		}
 		}
 	}
 
-	public var isAuthorized: Bool { peripheralManager.state != .unauthorized }
+	public var isAuthorized: Bool { BleMainQueue.sync { peripheralManager.state != .unauthorized } }
 
 	public func stopBleAdvertising() {
-		if let peripheralManager, peripheralManager.isAdvertising {
-			peripheralManager.stopAdvertising()
+		BleMainQueue.sync {
+			if let peripheralManager, peripheralManager.isAdvertising {
+				peripheralManager.stopAdvertising()
+			}
+			advertising = false
 		}
-		advertising = false
 	}
 
     private func deleteEphemeralSessionKey() {
@@ -259,16 +296,18 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
     }
 
     public func stop() {
-		stopBleAdvertising()
-		delegate?.qrCodePayload = nil
-		clearSession()
-		deleteEphemeralSessionKey()
-		if status == .error {
-			status = .initializing
+		BleMainQueue.sync {
+			stopBleAdvertising()
+			delegate?.qrCodePayload = nil
+			clearSession()
+			deleteEphemeralSessionKey()
+			if status == .error {
+				status = .initializing
+			}
 		}
 	}
 
-	func initPeripheralManager() {
+	private func initPeripheralManager() {
 		guard peripheralManager == nil else {
 			return
 		}
@@ -279,8 +318,8 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 		clearSession()
 	}
 
-	var isInErrorState: Bool { status == .error }
-	func handleErrorSet(_ newValue: Error?) {
+	private var isInErrorState: Bool { status == .error }
+	private func handleErrorSet(_ newValue: Error?) {
 		guard let newValue else {
 			return
 		}
@@ -290,20 +329,22 @@ public class MdocGattServer: @unchecked Sendable, MdocBleTransport {
 	}
 
 	public func sendData(_ data: Data) {
-		guard let remoteCentral else {
-			error = MdocHelpers.makeError(code: .unexpected_error, str: "No remote central available for response")
-			return
-		}
+		BleMainQueue.sync {
+			guard let remoteCentral else {
+				error = MdocHelpers.makeError(code: .unexpected_error, str: "No remote central available for response")
+				return
+			}
 			let maxPayloadBlockSize = min(511, remoteCentral.maximumUpdateValueLength - 1)
 			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: maxPayloadBlockSize)
 			let generation = session.generation
 			DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
-                guard self.session.generation == generation else { return }
+				guard self.session.generation == generation else { return }
 				self.sendDataWithUpdates()
 			}
+		}
 	}
 
-	func sendDataWithUpdates() {
+	private func sendDataWithUpdates() {
 		guard !sendBuffer.isEmpty else {
 			status = .responseSent
 			logger.info("Finished sending BLE data")

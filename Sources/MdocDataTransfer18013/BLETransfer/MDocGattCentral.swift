@@ -18,9 +18,13 @@ import CoreBluetooth
 import Foundation
 import os
 
+/// Mutable transport state is confined to the main queue, matching CoreBluetooth callbacks.
+/// Public synchronous access dispatches to main when needed. Callers must not block main
+/// while waiting for a background transport call. Delegate-owned state must follow the same rule.
 public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
-	var centralManager: CBCentralManager!
-	var peripheral: CBPeripheral?
+	private var centralManager: CBCentralManager!
+	private var peripheral: CBPeripheral?
+	// Internal state is also used by tests, which must access it on the main queue.
 	var writeCharacteristic: CBCharacteristic?
 	var readCharacteristic: CBCharacteristic?
 	var stateCharacteristic: CBCharacteristic?
@@ -31,7 +35,11 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	var maximumCharacteristicSize: Int?
 	var readBuffer = Data()
 	var sendBuffer = [Data]()
-	public var error: Error? = nil {
+	public var error: Error? {
+		get { BleMainQueue.sync { storedError } }
+		set { BleMainQueue.sync { storedError = newValue } }
+	}
+	private var storedError: Error? = nil {
 		didSet {
 			if let error {
 				status = .error
@@ -39,8 +47,16 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 			}
 		}
 	}
-	public weak var delegate: (any MdocOfflineDelegate)?
-	public var status: TransferStatus = .initialized {
+	private weak var storedDelegate: (any MdocOfflineDelegate)?
+	public var delegate: (any MdocOfflineDelegate)? {
+		get { BleMainQueue.sync { storedDelegate } }
+		set { BleMainQueue.sync { storedDelegate = newValue } }
+	}
+	public var status: TransferStatus {
+		get { BleMainQueue.sync { storedStatus } }
+		set { BleMainQueue.sync { storedStatus = newValue } }
+	}
+	private var storedStatus: TransferStatus = .initialized {
 		didSet {
 			delegate?.didChangeStatus(status)
 		}
@@ -53,32 +69,36 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	init(initializeBluetooth: Bool) {
 		super.init()
 		guard initializeBluetooth else { return }
-		centralManager = CBCentralManager(delegate: self, queue: nil)
-		status = .initialized
-		if isBlePoweredOn {
-			handleCentralPoweredOn()
+		BleMainQueue.sync {
+			centralManager = CBCentralManager(delegate: self, queue: nil)
+			status = .initialized
+			if isBlePoweredOn {
+				handleCentralPoweredOn()
+			}
 		}
 	}
 
 	public func stop() {
-		centralManager?.stopScan()
-		rejectedCandidates.removeAll()
-		disconnectFromDevice()
+		BleMainQueue.sync {
+			centralManager?.stopScan()
+			rejectedCandidates.removeAll()
+			disconnectFromDevice()
+		}
 	}
 
-    public func startBleAdvertising() {      
+    public func startBleAdvertising() {
     }
 
     public func stopBleAdvertising() {
     }
 
-    public var isBlePoweredOn: Bool { centralManager.state == .poweredOn }
+    public var isBlePoweredOn: Bool { BleMainQueue.sync { centralManager.state == .poweredOn } }
 
 	public var isAuthorized: Bool {
-		centralManager.state != .unauthorized
+		BleMainQueue.sync { centralManager.state != .unauthorized }
 	}
 	public var supportsL2cap: Bool { false }
-	
+
 	private func handleCentralPoweredOn() {
 		delegate?.didPoweredOn(isPeripheralManager: false)
 		status = .poweredOn
@@ -104,10 +124,12 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	public func disconnectFromDevice() {
-		if didSendStartRequest, let stateCharacteristic {
-			peripheral?.writeValue(Data(BleTransferMode.END_REQUEST), for: stateCharacteristic, type: .withoutResponse)
+		BleMainQueue.sync {
+			if didSendStartRequest, let stateCharacteristic {
+				peripheral?.writeValue(Data(BleTransferMode.END_REQUEST), for: stateCharacteristic, type: .withoutResponse)
+			}
+			disconnect()
 		}
-		disconnect()
 	}
 
 	private func disconnect() {
@@ -129,18 +151,20 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 
 	// Candidate failures are recoverable; the terminal error callback would end engagement.
 	func rejectReaderCandidate() {
-		if let peripheral { rejectedCandidates[peripheral.identifier] = Date().addingTimeInterval(30) }
-		disconnect()
-		logger.error("Reader Ident verification or discovery failed; resuming discovery")
-		guard centralManager?.state == .poweredOn,
-			let uuid = delegate?.deviceEngagement?.ble_uuid else { return }
-		// Keep receiving foreground advertisements so a candidate can be retried after its cooldown.
-		// didDiscover filters cooling-down candidates and prevents concurrent connections.
-		centralManager?.scanForPeripherals(
-			withServices: [CBUUID(string: uuid)],
-			options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
-		)
-		status = .qrEngagementReady
+		BleMainQueue.sync {
+			if let peripheral { rejectedCandidates[peripheral.identifier] = Date().addingTimeInterval(30) }
+			disconnect()
+			logger.error("Reader Ident verification or discovery failed; resuming discovery")
+			guard centralManager?.state == .poweredOn,
+				let uuid = delegate?.deviceEngagement?.ble_uuid else { return }
+			// Keep receiving foreground advertisements so a candidate can be retried after its cooldown.
+			// didDiscover filters cooling-down candidates and prevents concurrent connections.
+			centralManager?.scanForPeripherals(
+				withServices: [CBUUID(string: uuid)],
+				options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+			)
+			status = .qrEngagementReady
+		}
 	}
 
 	private func scheduleIdentityTimeout() {
@@ -154,14 +178,16 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 	}
 
 	public func sendData(_ data: Data) {
-		guard status == .requestReceived else {
-			logger.info("Unexpected write in status \(status)")
-			return
+		BleMainQueue.sync {
+			guard status == .requestReceived else {
+				logger.info("Unexpected write in status \(status)")
+				return
+			}
+			status = .userSelected
+			let blockSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
+			sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: blockSize)
+			writeNextBlock()
 		}
-		status = .userSelected
-		let blockSize = max((maximumCharacteristicSize ?? 1) - 1, 1)
-		sendBuffer = MdocHelpers.prepareDataBlocksToSend(data, blockSize: blockSize)
-		writeNextBlock()
 	}
 
 	private func writeNextBlock() {
@@ -196,7 +222,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		return nil
 	}
 
-	func processCharacteristics(
+	private func processCharacteristics(
 		peripheral: CBPeripheral,
 		characteristics: [CBCharacteristic]
 	) throws {
@@ -242,7 +268,7 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		guard data.first == BleTransferMode.END_REQUEST.first else { throw MdocHelpers.makeError(code: .bleInvalidStateByte) }
 	}
 
-	func processData(
+	private func processData(
 		peripheral: CBPeripheral,
 		characteristic: CBCharacteristic
 	) throws {
