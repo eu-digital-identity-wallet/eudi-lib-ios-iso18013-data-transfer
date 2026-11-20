@@ -149,8 +149,6 @@ public class MdocGattCentral: NSObject, MdocBleTransport, @unchecked Sendable {
 		readCharacteristic = nil
 		stateCharacteristic = nil
 		maximumCharacteristicSize = nil
-		readBuffer.removeAll()
-		sendBuffer.removeAll()
 	}
 
 	// Candidate failures are recoverable; the terminal error callback would end engagement.
@@ -363,13 +361,6 @@ extension MdocGattCentral: CBCentralManagerDelegate {
 			status = .disconnected
 		}
 	}
-
-    public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        guard self.peripheral === peripheral else { return }
-        self.peripheral = nil
-        disconnect()
-        if let error { self.error = error } else { status = .disconnected }
-    }
 
 	public func centralManager(_: CBCentralManager, didConnect peripheral: CBPeripheral) {
 		guard peripheral === self.peripheral else { return }
