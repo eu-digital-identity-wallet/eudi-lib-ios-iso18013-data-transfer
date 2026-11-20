@@ -45,6 +45,10 @@ When user (holder) acceptance is required, the app should show the request items
 
 The BLE server will send the requested if the user accepts. In the case the client app must call the `handleAccept` callback with `true`.
 
+### BLE receive limit
+
+Both BLE roles accept reassembled messages up to 256 KiB, excluding fragment prefixes. This is a library resource limit, not a protocol requirement. Larger incoming messages abort the session with a transport error. Receive buffers are released after message delivery and on teardown.
+
 ### Documentation
 Detail documentation reference is provided [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-transfer/documentation/mdocdatatransfer18013/)
 
