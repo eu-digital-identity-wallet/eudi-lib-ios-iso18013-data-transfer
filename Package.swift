@@ -15,7 +15,7 @@ let package = Package(
     dependencies: [
 		// workaround for secp256k1 dependency (https://github.com/beatt83/jose-swift/issues/71)
 		.package(url: "https://github.com/GigaBitcoin/secp256k1.swift.git", exact: "0.24.0"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security", exact: "0.32.0"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security", exact: "0.32.1"),
 		.package(url: "https://github.com/apple/swift-docc-plugin", from: "1.5.0"),
     ],
     targets: [
@@ -23,7 +23,8 @@ let package = Package(
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "MdocDataTransfer18013", dependencies: [
-				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security")]),
+				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security"),
+			]),
         .testTarget(
             name: "MdocDataTransfer18013Tests",
             dependencies: ["MdocDataTransfer18013"]),
